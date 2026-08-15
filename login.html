@@ -4,196 +4,70 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>RoutePlanner — Login / Sign Up</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: Roboto, Arial, Helvetica, sans-serif;
-    min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    background: #f1f3f4;
-    padding: 20px;
-  }
-  .auth-card {
-    width: 100%; max-width: 400px;
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 1px 3px rgba(60,64,67,.3), 0 8px 24px rgba(60,64,67,.15);
-    padding: 32px 28px;
-  }
-  .brand { text-align: center; margin-bottom: 22px; }
-  .brand .logo { font-size: 34px; }
-  .brand h1 { font-size: 22px; color: #202124; margin-top: 6px; font-weight: 500; }
-  .brand p { font-size: 13px; color: #70757a; margin-top: 4px; }
-
-  .tabs { display: flex; background: #f1f3f4; border-radius: 999px; padding: 4px; margin-bottom: 22px; }
-  .tab {
-    flex: 1; border: 0; background: transparent; cursor: pointer;
-    padding: 9px 0; border-radius: 999px; font-size: 14px; color: #5f6368;
-  }
-  .tab.active { background: #fff; color: #1a73e8; font-weight: 500; box-shadow: 0 1px 2px rgba(60,64,67,.3); }
-
-  .field { margin-bottom: 14px; }
-  .field label { display: block; font-size: 12px; color: #5f6368; margin-bottom: 6px; }
-  .field input {
-    width: 100%; padding: 12px 14px; font-size: 14px;
-    border: 1px solid #dadce0; border-radius: 8px; outline: none;
-    transition: border-color .15s, box-shadow .15s;
-  }
-  .field input:focus { border-color: #1a73e8; box-shadow: 0 0 0 3px rgba(26,115,232,.15); }
-
-  .row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin: 4px 0 18px; }
-  .row a { color: #1a73e8; text-decoration: none; }
-  .row label { color: #5f6368; display: flex; align-items: center; gap: 6px; }
-
-  .btn {
-    width: 100%; padding: 12px; border: 0; border-radius: 8px;
-    background: #1a73e8; color: #fff; font-size: 15px; cursor: pointer;
-    transition: background .15s;
-  }
-  .btn:hover { background: #1765cc; }
-
-  .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: #9aa0a6; font-size: 12px; }
-  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #e8eaed; }
-
-  .btn-ghost {
-    width: 100%; padding: 11px; border: 1px solid #dadce0; border-radius: 8px;
-    background: #fff; color: #3c4043; font-size: 14px; cursor: pointer;
-  }
-  .btn-ghost:hover { background: #f8f9fa; }
-
-  .msg { font-size: 13px; margin-bottom: 12px; display: none; }
-  .msg.error { color: #d93025; display: block; }
-  .msg.success { color: #188038; display: block; }
-  .hidden { display: none; }
-</style>
+<link rel="stylesheet" href="css/login.css" />
 </head>
 <body>
-  <div class="auth-card">
-    <div class="brand">
-      <div class="logo">🗺️</div>
-      <h1>RoutePlanner</h1>
-      <p>Sign in to save your routes and places</p>
-    </div>
+<div class="auth-card">
+<div class="brand">
+<div class="logo">🗺️</div>
+<h1>RoutePlanner</h1>
+<p>Sign in to save your routes and places</p>
+</div>
 
-    <div class="tabs">
-      <button class="tab active" id="loginTab">Login</button>
-      <button class="tab" id="signupTab">Sign Up</button>
-    </div>
+<div class="tabs">
+<button class="tab active" id="loginTab">Login</button>
+<button class="tab" id="signupTab">Sign Up</button>
+</div>
 
-    <div class="msg" id="message"></div>
+<div class="msg" id="message"></div>
 
-    <!-- LOGIN FORM -->
-    <form id="loginForm">
-      <div class="field">
-        <label for="loginEmail">Email</label>
-        <input type="email" id="loginEmail" placeholder="you@example.com" required />
-      </div>
-      <div class="field">
-        <label for="loginPassword">Password</label>
-        <input type="password" id="loginPassword" placeholder="Enter your password" required />
-      </div>
-      <div class="row">
-        <label><input type="checkbox" id="remember" /> Remember me</label>
-        <a href="#" id="forgot">Forgot password?</a>
-      </div>
-      <button class="btn" type="submit">Login</button>
-    </form>
+<form id="loginForm">
+<div class="field">
+<label for="loginEmail">Email</label>
+<input type="email" id="loginEmail" placeholder="you@example.com" required />
+</div>
 
-    <!-- SIGNUP FORM -->
-    <form id="signupForm" class="hidden">
-      <div class="field">
-        <label for="signupName">Full name</label>
-        <input type="text" id="signupName" placeholder="Your name" required />
-      </div>
-      <div class="field">
-        <label for="signupEmail">Email</label>
-        <input type="email" id="signupEmail" placeholder="you@example.com" required />
-      </div>
-      <div class="field">
-        <label for="signupPassword">Password</label>
-        <input type="password" id="signupPassword" placeholder="At least 6 characters" required />
-      </div>
-      <div class="field">
-        <label for="confirmPassword">Confirm password</label>
-        <input type="password" id="confirmPassword" placeholder="Re-enter password" required />
-      </div>
-      <button class="btn" type="submit">Create account</button>
-    </form>
+<div class="field">
+<label for="loginPassword">Password</label>
+<input type="password" id="loginPassword" placeholder="Enter your password" required />
+</div>
 
-    <div class="divider">or</div>
-    <button class="btn-ghost" id="guestBtn">Continue as guest</button>
-  </div>
+<div class="row">
+<label><input type="checkbox" id="remember" /> Remember me</label>
+<a href="#" id="forgot">Forgot password?</a>
+</div>
 
-<script>
-  const loginTab = document.getElementById('loginTab');
-  const signupTab = document.getElementById('signupTab');
-  const loginForm = document.getElementById('loginForm');
-  const signupForm = document.getElementById('signupForm');
-  const message = document.getElementById('message');
+<button class="btn" type="submit">Login</button>
+</form>
 
-  function showMessage(text, type) {
-    message.textContent = text;
-    message.className = 'msg ' + type;
-  }
-  function clearMessage() { message.textContent = ''; message.className = 'msg'; }
+<form id="signupForm" class="hidden">
+<div class="field">
+<label for="signupName">Full name</label>
+<input type="text" id="signupName" placeholder="Your name" required />
+</div>
 
-  function switchTab(mode) {
-    clearMessage();
-    const isLogin = mode === 'login';
-    loginTab.classList.toggle('active', isLogin);
-    signupTab.classList.toggle('active', !isLogin);
-    loginForm.classList.toggle('hidden', !isLogin);
-    signupForm.classList.toggle('hidden', isLogin);
-  }
-  loginTab.addEventListener('click', () => switchTab('login'));
-  signupTab.addEventListener('click', () => switchTab('signup'));
+<div class="field">
+<label for="signupEmail">Email</label>
+<input type="email" id="signupEmail" placeholder="you@example.com" required />
+</div>
 
-  // Simple demo storage (localStorage). Replace with a real backend for production.
-  function getUsers() { return JSON.parse(localStorage.getItem('rp_users') || '[]'); }
-  function saveUsers(users) { localStorage.setItem('rp_users', JSON.stringify(users)); }
+<div class="field">
+<label for="signupPassword">Password</label>
+<input type="password" id="signupPassword" placeholder="At least 6 characters" required />
+</div>
 
-  signupForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const name = document.getElementById('signupName').value.trim();
-    const email = document.getElementById('signupEmail').value.trim().toLowerCase();
-    const password = document.getElementById('signupPassword').value;
-    const confirm = document.getElementById('confirmPassword').value;
+<div class="field">
+<label for="confirmPassword">Confirm password</label>
+<input type="password" id="confirmPassword" placeholder="Re-enter password" required />
+</div>
 
-    if (password.length < 6) return showMessage('Password must be at least 6 characters.', 'error');
-    if (password !== confirm) return showMessage('Passwords do not match.', 'error');
+<button class="btn" type="submit">Create account</button>
+</form>
 
-    const users = getUsers();
-    if (users.some(u => u.email === email)) return showMessage('An account with this email already exists.', 'error');
+<div class="divider">or</div>
+<button class="btn-ghost" id="guestBtn">Continue as guest</button>
+</div>
 
-    users.push({ name, email, password });
-    saveUsers(users);
-    showMessage('Account created! You can log in now.', 'success');
-    signupForm.reset();
-    setTimeout(() => switchTab('login'), 800);
-  });
-
-  loginForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-    const password = document.getElementById('loginPassword').value;
-    const user = getUsers().find(u => u.email === email && u.password === password);
-
-    if (!user) return showMessage('Invalid email or password.', 'error');
-
-    localStorage.setItem('rp_session', JSON.stringify({ name: user.name, email: user.email }));
-    showMessage('Welcome back, ' + user.name + '! Redirecting...', 'success');
-    setTimeout(() => { window.location.href = 'main.html'; }, 700);
-  });
-
-  document.getElementById('forgot').addEventListener('click', (e) => {
-    e.preventDefault();
-    showMessage('Password reset is not available in this demo.', 'error');
-  });
-
-  document.getElementById('guestBtn').addEventListener('click', () => {
-    localStorage.setItem('rp_session', JSON.stringify({ name: 'Guest', email: 'Browsing without an account', guest: true }));
-    window.location.href = 'main.html';
-  });
-</script>
+<script src="js/login.js"></script>
 </body>
 </html>
