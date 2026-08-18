@@ -9,10 +9,8 @@ document.getElementById('avatar').textContent=(session.name||'?').charAt(0).toUp
 }
 
 document.getElementById('signOutBtn').addEventListener('click',()=>{
-if(confirm('Sign out of RoutePlanner?')){
 localStorage.removeItem('rp_session');
 window.location.href='login.html';
-}
 });
 
 const body=document.body;

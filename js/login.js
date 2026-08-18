@@ -97,11 +97,6 @@ email:user.email
 })
 );
 
-showMessage(
-'Welcome back, '+user.name+'! Redirecting...',
-'success'
-);
-
 setTimeout(()=>{
 window.location.href='main.html';
 },700);

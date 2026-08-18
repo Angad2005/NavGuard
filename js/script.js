@@ -1,39 +1,14 @@
-"use strict";
 
-/* =========================================================================
-   SAFENAV DASHBOARD — application script
-   Each block is labelled with the curriculum topic it demonstrates.
-   See the in-page "Dev Notes" panel for a rendered version of this map.
-   ========================================================================= */
-
-/* -------------------------------------------------------------------------
-   1. VARIABLES (var / let / const) & DATA TYPES
-   ------------------------------------------------------------------------- */
-const STORAGE_KEY = "safenav.hazards";      // const: reference never reassigned
-const SESSION_KEY = "safenav.lastTab";      // sessionStorage key
+const STORAGE_KEY = "rp_hazards";      // const: reference never reassigned
+const SESSION_KEY = "rp_session";      // sessionStorage key
 let activeTab = "active";                   // let: reassigned as the user clicks tabs
-var appBooted = false;                      // var: function/legacy-scoped flag (kept for the demo)
+var appBooted = false;                      // var: function/legacy-scoped flag
 
-// Data types on display: string, number, boolean, object, array, undefined
-const appMeta = {
-  name: "SafeNav",              // string
-  version: 1.2,                 // number
-  offline: false,                // boolean
-  authors: ["Team SafeNav"],    // array (object type)
-  lastSync: undefined            // undefined until first save
-};
-
-/* -------------------------------------------------------------------------
-   2. TYPE CONVERSION, OPERATORS
-   ------------------------------------------------------------------------- */
 function toSafeNumber(value, fallback = 0) {         // default parameter (ES6)
   const n = Number(value);                            // explicit type conversion
   return Number.isNaN(n) ? fallback : n;               // logical / comparison operators
 }
 
-/* -------------------------------------------------------------------------
-   3. DOM SHORTCUTS — Selecting Elements
-   ------------------------------------------------------------------------- */
 const $  = (sel, scope = document) => scope.querySelector(sel);   // arrow fn + default param
 const $$ = (sel, scope = document) => [...scope.querySelectorAll(sel)]; // spread -> real array
 
@@ -49,9 +24,6 @@ const formAlert      = $("#formAlert");
 const toastEl        = $("#snToast");
 const toastMsgEl     = $("#snToastMsg");
 
-/* -------------------------------------------------------------------------
-   4. LOCAL / SESSION STORAGE — Browser Data Management
-   ------------------------------------------------------------------------- */
 function loadHazards() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -64,8 +36,8 @@ function loadHazards() {
 
 function saveHazards(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  appMeta.lastSync = new Date().toISOString();
-  sessionStorage.setItem("safenav.lastSave", appMeta.lastSync); // sessionStorage demo
+  const lastSync = new Date().toISOString();
+  sessionStorage.setItem(SESSION_KEY, lastSync); // sessionStorage demo
 }
 
 let hazards = loadHazards();   // let: this array is mutated throughout the app's life
@@ -444,40 +416,7 @@ weatherForm.addEventListener("submit", async (event) => {   // async/await on an
 });
 
 /* =========================================================================
-   14. DEV NOTES — rendered from data (array of objects -> map -> DOM)
-   ========================================================================= */
-const CONCEPT_NOTES = [
-  { topic: "Variables & Data Types", body: "var / let / const are all used deliberately above — see STORAGE_KEY, activeTab, appBooted." },
-  { topic: "Operators & Conditionals", body: "getStatus() uses comparison + logical operators to classify a hazard as active, scheduled, or expired." },
-  { topic: "Loops", body: "render() uses a for...of loop to build hazard cards; forEach drives tab buttons and delegated listeners." },
-  { topic: "Functions", body: "Mix of declarations (function render(){}), expressions, and arrow functions ($ , map callbacks) with default & rest/spread params." },
-  { topic: "Arrays & Methods", body: "push(), filter(), sort(), reduce() and the spread operator all appear in the hazard pipeline." },
-  { topic: "Higher-Order Functions", body: "groupByStatus() uses reduce(); sortBySeverity() uses sort(); tab wiring uses forEach()." },
-  { topic: "Objects & Destructuring", body: "createHazard() builds a nested object; getStatus() destructures hazard.window in one line." },
-  { topic: "DOM Selection & Manipulation", body: "querySelector/querySelectorAll (via the $ / $$ helpers) and getElementById select nodes; createElement + classList build cards." },
-  { topic: "Events", body: "Click (tabs, delegated delete), submit (both forms), keydown (Esc), and change (schedule toggle) are all wired with addEventListener." },
-  { topic: "Forms & Validation", body: "hazardForm uses required/minlength attributes plus custom JS checks (end-after-start) and preventDefault()." },
-  { topic: "Storage", body: "localStorage persists the hazard list as JSON; sessionStorage remembers the last tab and last save time." },
-  { topic: "ES6 Features", body: "Template literals, spread/rest, destructuring and default parameters are used throughout this file." },
-  { topic: "Async JavaScript", body: "geocodeCity() shows Promise chaining with .then(); the weather submit handler shows async/await with try/catch/finally." },
-  { topic: "Fetch API & REST", body: "Live calls to the Open-Meteo geocoding + forecast REST endpoints, with JSON parsed from each response." },
-];
-
-function renderDevNotes() {
-  const grid = $("#devNotesGrid");
-  const html = CONCEPT_NOTES.map(({ topic, body }) => `
-    <div class="col-12 col-md-6 col-xl-4">
-      <div class="sn-note">
-        <div class="sn-note-topic">${escapeHtml(topic)}</div>
-        <div class="sn-note-body">${escapeHtml(body)}</div>
-      </div>
-    </div>
-  `).join("");                       // join() — another array method
-  grid.innerHTML = html;
-}
-
-/* =========================================================================
-   15. INIT — simulate an initial async load with a Promise, then boot the UI
+   14. INIT — simulate an initial async load with a Promise, then boot the UI
    ========================================================================= */
 function bootApp() {
   return new Promise((resolve) => {
@@ -495,6 +434,5 @@ bootApp().then((initialHazards) => {
     syncActiveTabButton();
   }
 
-  renderDevNotes();
   render();
 });
