@@ -2,7 +2,7 @@
 const STORAGE_KEY = "rp_hazards";      // const: reference never reassigned
 const SESSION_KEY = "rp_session";      // sessionStorage key
 let activeTab = "active";                   // let: reassigned as the user clicks tabs
-var appBooted = false;                      // var: function/legacy-scoped flag
+
 
 function toSafeNumber(value, fallback = 0) {         // default parameter (ES6)
   const n = Number(value);                            // explicit type conversion

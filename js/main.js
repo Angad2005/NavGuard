@@ -140,13 +140,13 @@ applyPrefs();
 });
 });
 
-const map=L.map('map',{zoomControl:false}).setView([28.6139,77.2090],12);
+const map=L.map('map').setView([28.6139,77.2090],12);
 
 L.control.zoom({position:'bottomright'}).addTo(map);
 
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-maxZoom:19,
-attribution:'© OpenStreetMap contributors'
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
 
 let startCoords=null;
@@ -166,11 +166,12 @@ const response=await fetch(
 const results=await response.json();
 
 if(results&&results.length>0){
-return{
-lat:parseFloat(results[0].lat),
-lng:parseFloat(results[0].lon),
-name:results[0].display_name
-};
+    
+    return{
+        lat:parseFloat(results[0].lat),
+        lng:parseFloat(results[0].lon),
+        name:results[0].display_name
+    };
 }
 
 return null;
@@ -178,7 +179,7 @@ return null;
 console.error('Geocoding error:',error);
 return null;
 }
-}
+};
 
 document.getElementById('startGpsBtn').addEventListener('click',()=>{
 document.getElementById('startInput').placeholder='Locating via device GPS...';
@@ -188,14 +189,9 @@ map.locate({setView:true,maxZoom:15});
 map.on('locationfound',e=>{
 startCoords=e.latlng;
 
-document.getElementById('startInput').value=
-`My Current Location (${startCoords.lat.toFixed(4)}, ${startCoords.lng.toFixed(4)})`;
-
 if(startMarker)map.removeLayer(startMarker);
 
-startMarker=L.marker(startCoords)
-.addTo(map)
-.bindPopup('Your Current Location')
+startMarker=L.marker(startCoords).addTo(map).bindPopup('Your Current Location')
 .openPopup();
 });
 
