@@ -1,4 +1,4 @@
-# NaviGuard
+# NavGuard
 This project is designed to personalize transit by prioritizing user safety alongside navigational efficiency through an innovative, hazard-aware routing engine. Unlike traditional mapping services that focus strictly on traffic or speed, this platform empowers users to pinpoint localized geospatial hazards—such as construction zones, flooded streets, or high-risk areas—and assign them strict temporal constraints. By distinguishing between ephemeral, time-sensitive incidents and cyclical, daily scheduled risks, the system implements routing algorithm to show route. Consequently, the application dynamically reroutes travelers seamlessly around active hazards, transforming standard GPS navigation into a proactive, safety-centric shield that ensures users reach their destinations through the most secure and safe pathways available.
 
 # Reference Docs
