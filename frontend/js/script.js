@@ -1,438 +1,207 @@
+const API_BASE = '/api';
+const SESSION_KEY = 'rp_session';
+let activeTab = 'active';
+let hazards = [];
 
-const STORAGE_KEY = "rp_hazards";      // const: reference never reassigned
-const SESSION_KEY = "rp_session";      // sessionStorage key
-let activeTab = "active";                   // let: reassigned as the user clicks tabs
+const $ = (selector, scope = document) => scope.querySelector(selector);
+const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
+const hazardListEl = $('#hazardList');
+const statActiveEl = $('#statActive');
+const statScheduledEl = $('#statScheduled');
+const statExpiredEl = $('#statExpired');
+const tabButtons = $$('.sn-tab');
+const hazardForm = $('#hazardForm');
+const scheduleToggle = $('#hzScheduleToggle');
+const scheduleFields = $('#scheduleFields');
+const formAlert = $('#formAlert');
+const toastEl = $('#snToast');
+const toastMsgEl = $('#snToastMsg');
 
-
-function toSafeNumber(value, fallback = 0) {         // default parameter (ES6)
-  const n = Number(value);                            // explicit type conversion
-  return Number.isNaN(n) ? fallback : n;               // logical / comparison operators
-}
-
-const $  = (sel, scope = document) => scope.querySelector(sel);   // arrow fn + default param
-const $$ = (sel, scope = document) => [...scope.querySelectorAll(sel)]; // spread -> real array
-
-const hazardListEl   = document.getElementById("hazardList");     // getElementById
-const statActiveEl   = $("#statActive");
-const statScheduledEl = $("#statScheduled");
-const statExpiredEl  = $("#statExpired");
-const tabButtons     = $$(".sn-tab");
-const hazardForm     = $("#hazardForm");
-const scheduleToggle = $("#hzScheduleToggle");
-const scheduleFields = $("#scheduleFields");
-const formAlert      = $("#formAlert");
-const toastEl        = $("#snToast");
-const toastMsgEl     = $("#snToastMsg");
-
-function loadHazards() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];          // JSON handling
-  } catch (err) {
-    console.error("Could not read hazards from storage:", err);
-    return [];
-  }
-}
-
-function saveHazards(list) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  const lastSync = new Date().toISOString();
-  sessionStorage.setItem(SESSION_KEY, lastSync); // sessionStorage demo
-}
-
-let hazards = loadHazards();   // let: this array is mutated throughout the app's life
-
-/* -------------------------------------------------------------------------
-   5. OBJECTS, DESTRUCTURING, REST/SPREAD — creating a hazard record
-   ------------------------------------------------------------------------- */
-function createHazard({ title, category, severity, location, description, isScheduled, start, end }) {
-  // object shorthand + nested object + spread
-  return {
-    id: `hz_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-    title,
-    category,
-    severity,
-    description: description || "",
-    window: {                                  // nested object
-      scheduled: isScheduled,
-      start: isScheduled ? start : null,
-      end: isScheduled ? end : null
-    },
-    meta: { location, reportedAt: new Date().toISOString() },
-  };
-}
-
-/* -------------------------------------------------------------------------
-   6. CONDITIONAL STATEMENTS + OPERATORS — status of a hazard
-   ------------------------------------------------------------------------- */
 function getStatus(hazard) {
-  const { scheduled, start, end } = hazard.window;   // destructuring
+  const windowInfo = hazard.window || {};
+  if (!windowInfo.scheduled) return 'active';
   const now = Date.now();
-
-  if (!scheduled) return "active";                    // simple conditional
-
-  const startTime = start ? new Date(start).getTime() : null;
-  const endTime   = end ? new Date(end).getTime() : null;
-
-  if (endTime && now > endTime) return "expired";
-  if (startTime && now < startTime) return "scheduled";
-  return "active";
+  const start = windowInfo.start ? new Date(windowInfo.start).getTime() : null;
+  const end = windowInfo.end ? new Date(windowInfo.end).getTime() : null;
+  if (end && now > end) return 'expired';
+  if (start && now < start) return 'scheduled';
+  return 'active';
 }
 
-/* -------------------------------------------------------------------------
-   7. HIGHER ORDER FUNCTIONS — filter / map / reduce / sort
-   ------------------------------------------------------------------------- */
 function groupByStatus(list) {
-  // reduce(): single pass -> { active: [...], scheduled: [...], expired: [...] }
-  return list.reduce((groups, hz) => {
-    const status = getStatus(hz);
-    groups[status].push(hz);
+  return list.reduce((groups, hazard) => {
+    groups[getStatus(hazard)].push(hazard);
     return groups;
   }, { active: [], scheduled: [], expired: [] });
 }
 
 function sortBySeverity(list) {
   const rank = { High: 0, Medium: 1, Low: 2 };
-  // sort(): higher severity first, stable copy via spread
-  return [...list].sort((a, b) => rank[a.severity] - rank[b.severity]);
+  return [...list].sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3));
 }
 
-/* -------------------------------------------------------------------------
-   8. DOM MANIPULATION — building hazard cards, template literals
-   ------------------------------------------------------------------------- */
-const STATUS_ICON = { active: "bi-broadcast", scheduled: "bi-clock-history", expired: "bi-archive" };
-const SEVERITY_CLASS = { Low: "sn-chip-low", Medium: "sn-chip-medium", High: "sn-chip-high" };
+function escapeHtml(value = '') {
+  const div = document.createElement('div');
+  div.textContent = value;
+  return div.innerHTML;
+}
+
+function hazardLocation(hazard) {
+  return hazard.location || (hazard.coordinates ? `${hazard.coordinates.lat.toFixed(5)}, ${hazard.coordinates.lng.toFixed(5)}` : 'Unknown location');
+}
 
 function timeLabel(hazard, status) {
-  const { start, end } = hazard.window;
-  if (status === "scheduled" && start) return `Starts ${new Date(start).toLocaleString()}`;
-  if (status === "active" && end) return `Until ${new Date(end).toLocaleString()}`;
-  if (status === "expired" && end) return `Ended ${new Date(end).toLocaleString()}`;
-  return "No time window";
+  const { start, end } = hazard.window || {};
+  if (status === 'scheduled' && start) return `Starts ${new Date(start).toLocaleString()}`;
+  if (status === 'active' && end) return `Until ${new Date(end).toLocaleString()}`;
+  if (status === 'expired' && end) return `Ended ${new Date(end).toLocaleString()}`;
+  return 'No time window';
 }
 
 function buildHazardCard(hazard, status) {
-  // createElement + classList — DOM Manipulation topic
-  const card = document.createElement("div");
+  const card = document.createElement('div');
+  const severityClass = { Low: 'sn-chip-low', Medium: 'sn-chip-medium', High: 'sn-chip-high' }[hazard.severity] || 'sn-chip-medium';
+  const icon = { active: 'bi-broadcast', scheduled: 'bi-clock-history', expired: 'bi-archive' }[status];
   card.className = `sn-hazard-card status-${status}`;
   card.dataset.id = hazard.id;
-
   card.innerHTML = `
     <div class="sn-hz-main">
       <div class="sn-hz-title">${escapeHtml(hazard.title)}</div>
       <div class="sn-hz-meta">
-        <span><i class="bi ${STATUS_ICON[status]}"></i>${capitalize(status)}</span>
-        <span><i class="bi bi-geo-alt"></i>${escapeHtml(hazard.meta.location)}</span>
+        <span><i class="bi ${icon}"></i>${status[0].toUpperCase() + status.slice(1)}</span>
+        <span><i class="bi bi-geo-alt"></i>${escapeHtml(hazardLocation(hazard))}</span>
         <span><i class="bi bi-tag"></i>${escapeHtml(hazard.category)}</span>
-        <span class="sn-chip ${SEVERITY_CLASS[hazard.severity]}">${hazard.severity}</span>
+        <span class="sn-chip ${severityClass}">${escapeHtml(hazard.severity)}</span>
         <span><i class="bi bi-clock"></i>${timeLabel(hazard, status)}</span>
       </div>
-      ${hazard.description ? `<div class="sn-hz-desc">${escapeHtml(hazard.description)}</div>` : ""}
+      ${hazard.description ? `<div class="sn-hz-desc">${escapeHtml(hazard.description)}</div>` : ''}
     </div>
-    <div class="sn-hz-actions">
-      <button class="sn-icon-btn" data-action="delete" title="Remove hazard">
-        <i class="bi bi-trash3"></i>
-      </button>
-    </div>
-  `;
+    <div class="sn-hz-actions"><button class="sn-icon-btn" data-action="delete" title="Remove hazard" aria-label="Remove hazard"><i class="bi bi-trash3"></i></button></div>`;
   return card;
 }
 
-function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-
-function escapeHtml(str = "") {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function renderEmptyState(status) {
-  const copy = {
-    active: "No active hazards. Roads look clear right now.",
-    scheduled: "Nothing scheduled. Time-window hazards will show up here.",
-    expired: "No expired hazards yet.",
-  };
-  const empty = document.createElement("div");
-  empty.className = "sn-empty";
-  empty.innerHTML = `<i class="bi bi-cloud-slash"></i><span>${copy[status]}</span>`;
-  return empty;
-}
-
-/* -------------------------------------------------------------------------
-   9. RENDER PIPELINE — loops (for...of), DOM traversal / removal
-   ------------------------------------------------------------------------- */
 function render() {
   const groups = groupByStatus(hazards);
-
-  // update stat cards — array length via reduce/filter results
   statActiveEl.textContent = groups.active.length;
   statScheduledEl.textContent = groups.scheduled.length;
   statExpiredEl.textContent = groups.expired.length;
-
-  // clear existing DOM node children (DOM traversal / removal)
-  while (hazardListEl.firstChild) {
-    hazardListEl.removeChild(hazardListEl.firstChild);
-  }
-
-  const currentList = sortBySeverity(groups[activeTab]);
-
-  if (currentList.length === 0) {
-    hazardListEl.appendChild(renderEmptyState(activeTab));
+  hazardListEl.replaceChildren();
+  const current = sortBySeverity(groups[activeTab]);
+  if (!current.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sn-empty';
+    empty.innerHTML = `<i class="bi bi-cloud-slash"></i><span>${({ active: 'No active hazards. Roads look clear right now.', scheduled: 'Nothing scheduled. Time-window hazards will show up here.', expired: 'No expired hazards yet.' })[activeTab]}</span>`;
+    hazardListEl.appendChild(empty);
     return;
   }
-
-  // for...of loop building DOM nodes
-  for (const hazard of currentList) {
-    hazardListEl.appendChild(buildHazardCard(hazard, activeTab));
-  }
+  current.forEach(hazard => hazardListEl.appendChild(buildHazardCard(hazard, activeTab)));
 }
 
-/* -------------------------------------------------------------------------
-   10. EVENT HANDLING — tabs (click), delegation, keyboard
-   ------------------------------------------------------------------------- */
-tabButtons.forEach((btn) => {                       // forEach — higher order function
-  btn.addEventListener("click", (event) => {
-    tabButtons.forEach((b) => b.classList.remove("active"));
-    event.currentTarget.classList.add("active");
-    activeTab = event.currentTarget.dataset.status;   // let reassigned here
-    sessionStorage.setItem(SESSION_KEY, activeTab);
-    render();
-  });
-});
-
-// Event delegation: one listener handles every delete button, current & future
-hazardListEl.addEventListener("click", (event) => {
-  const btn = event.target.closest('[data-action="delete"]');
-  if (!btn) return;
-  const card = btn.closest(".sn-hazard-card");
-  const id = card?.dataset.id;
-  hazards = hazards.filter((hz) => hz.id !== id);   // filter() removes the record
-  saveHazards(hazards);
+async function fetchHazards() {
+  const response = await fetch(`${API_BASE}/hazards`);
+  if (!response.ok) throw new Error('Could not load hazards from the backend.');
+  const payload = await response.json();
+  hazards = Array.isArray(payload.data) ? payload.data : [];
   render();
-  showToast("Hazard removed");
-});
-
-// Keyboard event — Esc closes the report modal even if focus is inside a field
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    const modalEl = document.getElementById("hazardModal");
-    const instance = bootstrap.Modal.getInstance(modalEl);
-    instance?.hide();
-  }
-});
-
-/* -------------------------------------------------------------------------
-   11. FORMS, VALIDATION, USER INPUT HANDLING
-   ------------------------------------------------------------------------- */
-scheduleToggle.addEventListener("change", (event) => {
-  scheduleFields.classList.toggle("d-none", !event.target.checked);
-  $("#hzStart").required = event.target.checked;
-  $("#hzEnd").required = event.target.checked;
-});
-
-function validateHazardForm() {
-  let isValid = true;                       // let: mutated as checks run
-  hazardForm.classList.add("was-validated");
-
-  const start = $("#hzStart").value;
-  const end = $("#hzEnd").value;
-
-  if (scheduleToggle.checked && start && end) {
-    const startOk = new Date(start).getTime() < new Date(end).getTime();
-    $("#hzEnd").setCustomValidity(startOk ? "" : "invalid");
-    if (!startOk) isValid = false;
-  }
-
-  if (!hazardForm.checkValidity()) isValid = false;   // native form validation API
-
-  formAlert.classList.toggle("d-none", isValid);
-  if (!isValid) {
-    formAlert.textContent = "Please fix the highlighted fields before submitting.";
-  }
-  return isValid;
 }
 
-hazardForm.addEventListener("submit", (event) => {
-  event.preventDefault();                    // preventDefault() — stop native submit/reload
-
-  if (!validateHazardForm()) return;
-
-  // destructure form values straight off the elements
-  const { value: title } = $("#hzTitle");
-  const category = $("#hzCategory").value;
-  const severity = $("#hzSeverity").value;
-  const { value: location } = $("#hzLocation");
-  const description = $("#hzDescription").value.trim();
-  const isScheduled = scheduleToggle.checked;
-  const start = $("#hzStart").value;
-  const end = $("#hzEnd").value;
-
-  const hazard = createHazard({ title, category, severity, location, description, isScheduled, start, end });
-
-  hazards.push(hazard);              // push() — array method
-  saveHazards(hazards);
-  activeTab = getStatus(hazard);
-  syncActiveTabButton();
-  render();
-
-  hazardForm.reset();
-  hazardForm.classList.remove("was-validated");
-  scheduleFields.classList.add("d-none");
-  bootstrap.Modal.getInstance(document.getElementById("hazardModal")).hide();
-  showToast("Hazard reported");
-});
-
-function syncActiveTabButton() {
-  tabButtons.forEach((b) => b.classList.toggle("active", b.dataset.status === activeTab));
+async function createHazard(data) {
+  const response = await fetch(`${API_BASE}/hazards`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Could not save hazard.');
+  hazards.push(payload.data);
+  return payload.data;
 }
 
-/* -------------------------------------------------------------------------
-   12. TOAST HELPER — simple timed UI feedback (setTimeout)
-   ------------------------------------------------------------------------- */
-function showToast(message = "Done") {
+async function deleteHazard(id) {
+  const response = await fetch(`${API_BASE}/hazards/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error('Could not remove hazard.');
+  hazards = hazards.filter(hazard => hazard.id !== id);
+}
+
+function showToast(message = 'Done') {
   toastMsgEl.textContent = message;
-  toastEl.classList.add("show");
-  setTimeout(() => toastEl.classList.remove("show"), 2200);
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 2200);
 }
 
-/* =========================================================================
-   13. ASYNCHRONOUS JAVASCRIPT — Weather Advisory (Fetch API + REST + JSON)
-   ========================================================================= */
+tabButtons.forEach(button => button.addEventListener('click', () => {
+  tabButtons.forEach(item => item.classList.remove('active'));
+  button.classList.add('active');
+  activeTab = button.dataset.status;
+  sessionStorage.setItem(SESSION_KEY, activeTab);
+  render();
+}));
 
-// Maps Open-Meteo's numeric weather codes to a human description + hazard advice.
-// Object literal used as a lookup table (avoids long if/else chains).
-const WEATHER_CODES = {
-  0: { label: "Clear sky", level: "ok" },
-  1: { label: "Mostly clear", level: "ok" },
-  2: { label: "Partly cloudy", level: "ok" },
-  3: { label: "Overcast", level: "ok" },
-  45: { label: "Fog", level: "warn" },
-  48: { label: "Dense fog", level: "danger" },
-  51: { label: "Light drizzle", level: "warn" },
-  61: { label: "Rain", level: "warn" },
-  63: { label: "Moderate rain", level: "warn" },
-  65: { label: "Heavy rain", level: "danger" },
-  71: { label: "Snow", level: "danger" },
-  80: { label: "Rain showers", level: "warn" },
-  95: { label: "Thunderstorm", level: "danger" },
-  99: { label: "Severe thunderstorm", level: "danger" },
-};
+hazardListEl.addEventListener('click', async event => {
+  const button = event.target.closest('[data-action="delete"]');
+  if (!button) return;
+  try {
+    await deleteHazard(button.closest('.sn-hazard-card').dataset.id);
+    render();
+    showToast('Hazard removed');
+  } catch (error) { showToast(error.message); }
+});
 
-function describeWeather(code) {
-  return WEATHER_CODES[code] || { label: "Unknown conditions", level: "ok" };
-}
+scheduleToggle.addEventListener('change', event => {
+  scheduleFields.classList.toggle('d-none', !event.target.checked);
+  $('#hzStart').required = event.target.checked;
+  $('#hzEnd').required = event.target.checked;
+});
 
-// Promise chaining example: geocode a city name to coordinates.
-function geocodeCity(city) {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`;
-  return fetch(url)
-    .then((res) => {
-      if (!res.ok) throw new Error("Geocoding service unavailable");
-      return res.json();                     // JSON handling
-    })
-    .then((data) => {
-      const place = data.results?.[0];
-      if (!place) throw new Error(`Couldn't find "${city}"`);
-      return { lat: place.latitude, lon: place.longitude, name: place.name, country: place.country };
+hazardForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  hazardForm.classList.add('was-validated');
+  const start = $('#hzStart').value;
+  const end = $('#hzEnd').value;
+  $('#hzEnd').setCustomValidity(scheduleToggle.checked && start && end && new Date(start) >= new Date(end) ? 'invalid' : '');
+  if (!hazardForm.checkValidity()) {
+    formAlert.textContent = 'Please fix the highlighted fields before submitting.';
+    formAlert.classList.remove('d-none');
+    return;
+  }
+  try {
+    const hazard = await createHazard({
+      title: $('#hzTitle').value.trim(), category: $('#hzCategory').value, severity: $('#hzSeverity').value,
+      location: $('#hzLocation').value.trim(), description: $('#hzDescription').value.trim(),
+      window: { scheduled: scheduleToggle.checked, start: scheduleToggle.checked ? start : null, end: scheduleToggle.checked ? end : null }
     });
-}
+    activeTab = getStatus(hazard);
+    tabButtons.forEach(button => button.classList.toggle('active', button.dataset.status === activeTab));
+    render();
+    hazardForm.reset();
+    hazardForm.classList.remove('was-validated');
+    scheduleFields.classList.add('d-none');
+    formAlert.classList.add('d-none');
+    bootstrap.Modal.getInstance($('#hazardModal')).hide();
+    showToast('Hazard reported to backend');
+  } catch (error) { formAlert.textContent = error.message; formAlert.classList.remove('d-none'); }
+});
 
-// async/await example: fetch current weather once we have coordinates.
-async function fetchCurrentWeather(lat, lon) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Weather service unavailable");
-  const data = await res.json();
-  return data.current_weather;
-}
+const WEATHER_CODES = { 0: ['Clear sky', 'ok'], 1: ['Mostly clear', 'ok'], 2: ['Partly cloudy', 'ok'], 3: ['Overcast', 'ok'], 45: ['Fog', 'warn'], 48: ['Dense fog', 'danger'], 51: ['Light drizzle', 'warn'], 61: ['Rain', 'warn'], 63: ['Moderate rain', 'warn'], 65: ['Heavy rain', 'danger'], 71: ['Snow', 'danger'], 80: ['Rain showers', 'warn'], 95: ['Thunderstorm', 'danger'], 99: ['Severe thunderstorm', 'danger'] };
+function describeWeather(code) { const [label, level] = WEATHER_CODES[code] || ['Unknown conditions', 'ok']; return { label, level }; }
+async function geocodeCity(city) { const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`); if (!response.ok) throw new Error('Geocoding service unavailable'); const data = await response.json(); const place = data.results?.[0]; if (!place) throw new Error(`Could not find "${city}"`); return { lat: place.latitude, lon: place.longitude, name: place.name, country: place.country }; }
+async function fetchCurrentWeather(lat, lon) { const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`); if (!response.ok) throw new Error('Weather service unavailable'); return (await response.json()).current_weather; }
 
 function renderWeather(place, weather) {
   const info = describeWeather(weather.weathercode);
-  const adviceClass = { ok: "sn-advice-ok", warn: "sn-advice-warn", danger: "sn-advice-danger" }[info.level];
-  const adviceText = {
-    ok: "No road hazard suggested for these conditions.",
-    warn: "Roads may be slick — consider flagging a hazard.",
-    danger: "Conditions look severe — flagging a hazard is recommended.",
-  }[info.level];
-
-  const box = document.createElement("div");
-  box.className = "sn-weather-card";
-  box.innerHTML = `
-    <div class="sn-weather-temp">${Math.round(weather.temperature)}&deg;C</div>
-    <div class="sn-weather-desc">${info.label} in ${escapeHtml(place.name)}, ${escapeHtml(place.country || "")} &middot; wind ${Math.round(weather.windspeed)} km/h</div>
-    <div class="sn-weather-advice ${adviceClass}"><i class="bi bi-info-circle"></i>${adviceText}</div>
-    ${info.level !== "ok" ? `<button class="btn sn-btn-primary btn-sm w-100" id="quickAddHazard"><i class="bi bi-plus-lg me-1"></i>Add as Hazard</button>` : ""}
-  `;
-
-  const result = $("#weatherResult");
-  result.innerHTML = "";
-  result.appendChild(box);
-
-  const quickAddBtn = $("#quickAddHazard", box);
-  if (quickAddBtn) {
-    quickAddBtn.addEventListener("click", () => {
-      const hazard = createHazard({
-        title: `${info.label} affecting routes near ${place.name}`,
-        category: "Weather",
-        severity: info.level === "danger" ? "High" : "Medium",
-        location: place.name,
-        description: `Auto-suggested from live weather data (${Math.round(weather.temperature)}\u00B0C, wind ${Math.round(weather.windspeed)} km/h).`,
-        isScheduled: false,
-      });
-      hazards.push(hazard);
-      saveHazards(hazards);
-      activeTab = "active";
-      syncActiveTabButton();
-      render();
-      showToast("Hazard added from weather advisory");
-    });
-  }
-}
-
-const weatherForm = $("#weatherForm");
-const weatherBtn = $("#weatherBtn");
-const weatherBtnText = $("#weatherBtnText");
-
-weatherForm.addEventListener("submit", async (event) => {   // async/await on an event handler
-  event.preventDefault();
-  const city = $("#cityInput").value.trim();
-  const resultBox = $("#weatherResult");
-  if (!city) return;
-
-  weatherBtn.disabled = true;
-  weatherBtnText.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-  resultBox.innerHTML = "";
-
-  try {
-    const place = await geocodeCity(city);              // await on a chained promise
-    const weather = await fetchCurrentWeather(place.lat, place.lon); // await on async fn
-    renderWeather(place, weather);
-  } catch (err) {                                        // error handling
-    resultBox.innerHTML = `<div class="sn-weather-error"><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(err.message)}</div>`;
-  } finally {
-    weatherBtn.disabled = false;
-    weatherBtnText.innerHTML = `<i class="bi bi-search"></i>`;
-  }
-});
-
-/* =========================================================================
-   14. INIT — simulate an initial async load with a Promise, then boot the UI
-   ========================================================================= */
-function bootApp() {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(hazards), 150);   // simulated latency
+  const result = $('#weatherResult');
+  result.innerHTML = `<div class="sn-weather-card"><div class="sn-weather-temp">${Math.round(weather.temperature)}&deg;C</div><div class="sn-weather-desc">${escapeHtml(info.label)} in ${escapeHtml(place.name)}, ${escapeHtml(place.country || '')} &middot; wind ${Math.round(weather.windspeed)} km/h</div><div class="sn-weather-advice sn-advice-${info.level}"><i class="bi bi-info-circle"></i>${info.level === 'ok' ? 'No road hazard suggested for these conditions.' : info.level === 'danger' ? 'Conditions look severe — flagging a hazard is recommended.' : 'Roads may be slick — consider flagging a hazard.'}</div>${info.level !== 'ok' ? '<button class="btn sn-btn-primary btn-sm w-100" id="quickAddHazard"><i class="bi bi-plus-lg me-1"></i>Add as Hazard</button>' : ''}</div>`;
+  $('#quickAddHazard', result)?.addEventListener('click', async () => {
+    try { const hazard = await createHazard({ title: `${info.label} affecting routes near ${place.name}`, category: 'Weather', severity: info.level === 'danger' ? 'High' : 'Medium', location: place.name, description: `Suggested from live weather data (${Math.round(weather.temperature)}°C, wind ${Math.round(weather.windspeed)} km/h).`, window: { scheduled: false } }); activeTab = getStatus(hazard); render(); showToast('Hazard added from weather advisory'); } catch (error) { showToast(error.message); }
   });
 }
 
-bootApp().then((initialHazards) => {
-  hazards = initialHazards;
-  appBooted = true;
-
-  const savedTab = sessionStorage.getItem(SESSION_KEY);
-  if (savedTab) {
-    activeTab = savedTab;
-    syncActiveTabButton();
-  }
-
-  render();
+$('#weatherForm').addEventListener('submit', async event => {
+  event.preventDefault(); const city = $('#cityInput').value.trim(); if (!city) return;
+  const button = $('#weatherBtn'); button.disabled = true; $('#weatherBtnText').innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; $('#weatherResult').innerHTML = '';
+  try { const place = await geocodeCity(city); renderWeather(place, await fetchCurrentWeather(place.lat, place.lon)); }
+  catch (error) { $('#weatherResult').innerHTML = `<div class="sn-weather-error"><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(error.message)}</div>`; }
+  finally { button.disabled = false; $('#weatherBtnText').innerHTML = '<i class="bi bi-search"></i>'; }
 });
+
+(async function bootApp() {
+  const savedTab = sessionStorage.getItem(SESSION_KEY);
+  if (savedTab && ['active', 'scheduled', 'expired'].includes(savedTab)) { activeTab = savedTab; tabButtons.forEach(button => button.classList.toggle('active', button.dataset.status === activeTab)); }
+  try { await fetchHazards(); } catch (error) { hazardListEl.innerHTML = `<div class="sn-empty"><i class="bi bi-wifi-off"></i><span>${escapeHtml(error.message)}</span></div>`; }
+})();

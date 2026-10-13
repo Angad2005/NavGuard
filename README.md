@@ -9,7 +9,8 @@ NaviGuard is a safety-first navigation app that combines route planning with com
 - Hazard dashboard with active, scheduled, and expired states
 - Weather advisory lookup powered by Open-Meteo
 - Accessibility preferences, contrast modes, font choices, and dark theme
-- Express backend with static frontend hosting and a starter hazards API
+- Express backend with static frontend hosting and a shared hazards API
+- Map reports are pinned by latitude/longitude and appear in the hazard dashboard
 
 ## Project structure
 
@@ -65,7 +66,7 @@ The backend currently uses in-memory storage so it is easy to run locally. Data 
 | --- | --- | --- |
 | `GET` | `/api/health` | Returns service status and timestamp |
 | `GET` | `/api/hazards` | Lists hazards held by the server |
-| `POST` | `/api/hazards` | Creates a hazard |
+| `POST` | `/api/hazards` | Creates a hazard, optionally with `coordinates: { lat, lng }` |
 | `DELETE` | `/api/hazards/:id` | Removes a hazard by ID |
 
 Example request:

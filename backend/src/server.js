@@ -20,12 +20,16 @@ app.get('/api/hazards', (_req, res) => {
 });
 
 app.post('/api/hazards', (req, res) => {
-  const { title, category, severity, location, description = '', window = {} } = req.body || {};
+  const { title, category, severity, location, description = '', window = {}, coordinates = null } = req.body || {};
 
   if (!title || !category || !severity || !location) {
     return res.status(400).json({
       error: 'title, category, severity, and location are required'
     });
+  }
+
+  if (coordinates !== null && (!Number.isFinite(Number(coordinates.lat)) || !Number.isFinite(Number(coordinates.lng)))) {
+    return res.status(400).json({ error: 'coordinates.lat and coordinates.lng must be valid numbers' });
   }
 
   const hazard = {
@@ -35,6 +39,10 @@ app.post('/api/hazards', (req, res) => {
     severity: String(severity).trim(),
     location: String(location).trim(),
     description: String(description).trim(),
+    coordinates: coordinates ? {
+      lat: Number(coordinates.lat),
+      lng: Number(coordinates.lng)
+    } : null,
     window: {
       scheduled: Boolean(window.scheduled),
       start: window.start || null,

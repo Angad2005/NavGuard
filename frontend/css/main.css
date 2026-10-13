@@ -398,6 +398,31 @@ flex:1;
 height:100vh;
 }
 
+.dashboard-link{ text-decoration:none; }
+.map-report-btn{
+position:absolute; right:24px; bottom:28px; z-index:1001;
+width:58px; height:58px; border:0; border-radius:50%;
+background:var(--accent); color:#fff; font-size:34px; line-height:1;
+box-shadow:0 5px 18px rgba(0,0,0,.3); cursor:pointer;
+transition:transform .15s ease, background .15s ease;
+}
+.map-report-btn:hover{ transform:scale(1.06); background:var(--accent-hover); }
+.report-modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(0,0,0,.42); z-index:3000; }
+.report-modal.open{ display:flex; }
+.report-modal-card{ width:min(430px,100%); max-height:calc(100vh - 40px); overflow:auto; background:var(--dropdown-bg); color:var(--text-primary); border:1px solid var(--border-color); border-radius:16px; padding:22px; box-shadow:0 18px 50px rgba(0,0,0,.3); }
+.report-modal-header{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:8px; }
+.report-kicker{ color:var(--accent); font-size:11px; font-weight:700; letter-spacing:1.5px; }
+.report-modal h2{ margin:4px 0 0; font-size:22px; }
+.report-close{ border:0; background:transparent; color:var(--text-secondary); font-size:28px; line-height:1; cursor:pointer; }
+.report-help{ color:var(--text-secondary); font-size:13px; line-height:1.5; margin-bottom:18px; }
+#mapHazardForm label{ display:block; color:var(--text-muted); font-size:12px; margin:12px 0 6px; }
+#mapHazardForm label span{ color:var(--text-secondary); }
+#mapHazardForm input,#mapHazardForm select,#mapHazardForm textarea{ width:100%; padding:10px 12px; border:1px solid var(--input-border); border-radius:8px; background:var(--dropdown-bg); color:var(--text-primary); font:inherit; }
+#mapHazardForm input:focus,#mapHazardForm select:focus,#mapHazardForm textarea:focus{ outline:2px solid color-mix(in srgb,var(--accent) 30%,transparent); border-color:var(--accent); }
+.report-coordinates{ margin-top:14px; padding:9px 10px; border-radius:8px; background:var(--panel-bg); color:var(--text-secondary); font-size:12px; }
+.report-modal-actions{ display:flex; gap:10px; margin-top:18px; }
+.report-modal-actions .btn{ flex:1; }
+
 @media(max-width:820px){
 body{flex-direction:column}
 .sidebar{
@@ -406,6 +431,7 @@ min-width:0;
 height:55vh;
 }
 #map{height:45vh}
+.map-report-btn{ right:16px; bottom:16px; width:52px; height:52px; }
 .dropdown-panel{
 right:12px;
 width:calc(100% - 24px);

@@ -15,6 +15,7 @@
 <span class="logo">🗺️</span>
 <h2>RoutePlanner</h2>
 <div class="header-icons">
+<a class="icon-btn dashboard-link" href="Hazard.html" title="Open hazard dashboard" aria-label="Open hazard dashboard">⚠️</a>
 <button class="icon-btn" id="accessibilityBtn" title="Accessibility settings" aria-label="Accessibility settings" aria-haspopup="true">♿</button>
 <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings" aria-haspopup="true">⚙️</button>
 </div>
@@ -107,6 +108,32 @@ Enter a start address and a destination location above, then click <b>Navigate</
 </div>
 
 <div id="map"></div>
+
+<button class="map-report-btn" id="mapReportBtn" type="button" title="Report a hazard" aria-label="Report a hazard">+</button>
+
+<div class="report-modal" id="mapHazardModal" aria-hidden="true">
+<div class="report-modal-card" role="dialog" aria-modal="true" aria-labelledby="mapHazardTitle">
+<div class="report-modal-header">
+<div><span class="report-kicker">MAP REPORT</span><h2 id="mapHazardTitle">Mark a hazard</h2></div>
+<button class="report-close" id="closeMapHazard" type="button" aria-label="Close hazard report">×</button>
+</div>
+<p class="report-help" id="mapHazardHelp">Click anywhere on the map to place a hazard marker, or use the plus button to choose a location.</p>
+<form id="mapHazardForm">
+<label for="mapHazardCategory">Hazard type</label>
+<select id="mapHazardCategory" required>
+<option value="">Select a type</option><option>Road Damage</option><option>Flooding</option><option>Debris</option><option>Accident</option><option>Weather</option><option>Other</option>
+</select>
+<label for="mapHazardTitleInput">Title</label>
+<input id="mapHazardTitleInput" type="text" placeholder="What should drivers know?" required minlength="3">
+<label for="mapHazardSeverity">Severity</label>
+<select id="mapHazardSeverity"><option>Low</option><option selected>Medium</option><option>High</option></select>
+<label for="mapHazardDescription">Details <span>(optional)</span></label>
+<textarea id="mapHazardDescription" rows="3" placeholder="Add useful context..."></textarea>
+<div class="report-coordinates" id="mapHazardCoordinates">No map location selected yet.</div>
+<div class="report-modal-actions"><button class="btn btn-secondary" id="cancelMapHazard" type="button">Cancel</button><button class="btn btn-primary" type="submit">Report hazard</button></div>
+</form>
+</div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>

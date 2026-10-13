@@ -348,3 +348,86 @@ Enter a start address and a destination location above, then click <b>Navigate</
 </div>
 `;
 }
+
+/* Map hazard reporting: the map chooses the coordinates, the backend stores the report. */
+const mapHazardModal=document.getElementById('mapHazardModal');
+const mapHazardForm=document.getElementById('mapHazardForm');
+const mapHazardCoordinates=document.getElementById('mapHazardCoordinates');
+const mapHazardHelp=document.getElementById('mapHazardHelp');
+let selectedHazardPoint=null;
+let hazardMarker=null;
+
+function openHazardReport(point=null){
+  if(point) setHazardPoint(point);
+  mapHazardModal.classList.add('open');
+  mapHazardModal.setAttribute('aria-hidden','false');
+  document.getElementById('mapHazardCategory').focus();
+}
+
+function closeHazardReport(){
+  mapHazardModal.classList.remove('open');
+  mapHazardModal.setAttribute('aria-hidden','true');
+}
+
+function setHazardPoint(point){
+  selectedHazardPoint=L.latLng(point.lat,point.lng);
+  mapHazardCoordinates.textContent=`Pinned location: ${selectedHazardPoint.lat.toFixed(5)}, ${selectedHazardPoint.lng.toFixed(5)}`;
+  mapHazardHelp.textContent='This report will be attached to the pinned map location.';
+  if(hazardMarker) map.removeLayer(hazardMarker);
+  hazardMarker=L.marker(selectedHazardPoint).addTo(map).bindPopup('Hazard location selected').openPopup();
+}
+
+document.getElementById('mapReportBtn').addEventListener('click',()=>openHazardReport(map.getCenter()));
+document.getElementById('closeMapHazard').addEventListener('click',closeHazardReport);
+document.getElementById('cancelMapHazard').addEventListener('click',closeHazardReport);
+mapHazardModal.addEventListener('click',event=>{if(event.target===mapHazardModal) closeHazardReport();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&mapHazardModal.classList.contains('open')) closeHazardReport();});
+
+map.on('click',event=>openHazardReport(event.latlng));
+
+mapHazardForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(!selectedHazardPoint){
+    mapHazardHelp.textContent='Click a location on the map first so the report can be placed.';
+    mapHazardHelp.style.color='var(--danger)';
+    closeHazardReport();
+    return;
+  }
+
+  const submitButton=mapHazardForm.querySelector('button[type="submit"]');
+  submitButton.disabled=true;
+  try{
+    const response=await fetch('/api/hazards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      title:document.getElementById('mapHazardTitleInput').value.trim(),
+      category:document.getElementById('mapHazardCategory').value,
+      severity:document.getElementById('mapHazardSeverity').value,
+      location:`Map pin (${selectedHazardPoint.lat.toFixed(5)}, ${selectedHazardPoint.lng.toFixed(5)})`,
+      description:document.getElementById('mapHazardDescription').value.trim(),
+      coordinates:{lat:selectedHazardPoint.lat,lng:selectedHazardPoint.lng}
+    })});
+    const payload=await response.json();
+    if(!response.ok) throw new Error(payload.error||'Could not save hazard');
+    mapHazardForm.reset();
+    closeHazardReport();
+    if(hazardMarker) hazardMarker.bindPopup(`<b>${payload.data.title}</b><br>Reported hazard`).openPopup();
+  }catch(error){
+    mapHazardHelp.textContent=error.message;
+    mapHazardHelp.style.color='var(--danger)';
+  }finally{ submitButton.disabled=false; }
+});
+
+async function loadReportedHazards(){
+  try{
+    const response=await fetch('/api/hazards');
+    if(!response.ok) return;
+    const payload=await response.json();
+    (payload.data||[]).filter(hazard=>hazard.coordinates).forEach(hazard=>{
+      const point=L.latLng(hazard.coordinates.lat,hazard.coordinates.lng);
+      L.circleMarker(point,{radius:7,color:'#d93025',fillColor:'#d93025',fillOpacity:.82,weight:2})
+        .addTo(map)
+        .bindPopup(`<b>${String(hazard.title).replace(/[&<>]/g,'')}</b><br>${String(hazard.severity).replace(/[&<>]/g,'')} severity`);
+    });
+  }catch(error){ console.warn('Could not load reported hazards:',error); }
+}
+
+loadReportedHazards();
