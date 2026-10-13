@@ -2,6 +2,7 @@ const API_BASE = '/api';
 const SESSION_KEY = 'rp_session';
 let activeTab = 'active';
 let hazards = [];
+let reportCoordinates = null;
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
@@ -16,6 +17,29 @@ const scheduleFields = $('#scheduleFields');
 const formAlert = $('#formAlert');
 const toastEl = $('#snToast');
 const toastMsgEl = $('#snToastMsg');
+
+async function reverseGeocodeLocation(lat, lon) {
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`);
+    if (!response.ok) return null;
+    return (await response.json()).display_name || null;
+  } catch (error) { return null; }
+}
+
+function prefillCurrentLocation() {
+  const locationInput = $('#hzLocation');
+  reportCoordinates = null;
+  locationInput.value = 'Locating your current position...';
+  if (!navigator.geolocation) { locationInput.value = ''; return; }
+  navigator.geolocation.getCurrentPosition(async position => {
+    const { latitude, longitude } = position.coords;
+    reportCoordinates = { lat: latitude, lng: longitude };
+    locationInput.value = await reverseGeocodeLocation(latitude, longitude) || `Current location (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`;
+  }, () => {
+    locationInput.value = '';
+    locationInput.placeholder = 'Location unavailable — enter manually';
+  }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+}
 
 function getStatus(hazard) {
   const windowInfo = hazard.window || {};
@@ -149,6 +173,8 @@ scheduleToggle.addEventListener('change', event => {
   $('#hzEnd').required = event.target.checked;
 });
 
+$('#hazardModal').addEventListener('show.bs.modal', prefillCurrentLocation);
+
 hazardForm.addEventListener('submit', async event => {
   event.preventDefault();
   hazardForm.classList.add('was-validated');
@@ -163,13 +189,14 @@ hazardForm.addEventListener('submit', async event => {
   try {
     const hazard = await createHazard({
       title: $('#hzTitle').value.trim(), category: $('#hzCategory').value, severity: $('#hzSeverity').value,
-      location: $('#hzLocation').value.trim(), description: $('#hzDescription').value.trim(),
+      location: $('#hzLocation').value.trim(), description: $('#hzDescription').value.trim(), coordinates: reportCoordinates,
       window: { scheduled: scheduleToggle.checked, start: scheduleToggle.checked ? start : null, end: scheduleToggle.checked ? end : null }
     });
     activeTab = getStatus(hazard);
     tabButtons.forEach(button => button.classList.toggle('active', button.dataset.status === activeTab));
     render();
     hazardForm.reset();
+    reportCoordinates = null;
     hazardForm.classList.remove('was-validated');
     scheduleFields.classList.add('d-none');
     formAlert.classList.add('d-none');

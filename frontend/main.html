@@ -6,7 +6,6 @@
 <title>NaviGuard — Directions</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
 <link rel="stylesheet" href="css/main.css" />
 </head>
 <body>
@@ -109,7 +108,7 @@ Enter a start address and a destination location above, then click <b>Navigate</
 
 <div id="map"></div>
 
-<button class="map-report-btn" id="mapReportBtn" type="button" title="Report a hazard" aria-label="Report a hazard">+</button>
+<button class="map-report-btn" id="mapReportBtn" type="button" title="Report a hazard at my current location" aria-label="Report a hazard at my current location">+</button>
 
 <div class="report-modal" id="mapHazardModal" aria-hidden="true">
 <div class="report-modal-card" role="dialog" aria-modal="true" aria-labelledby="mapHazardTitle">
@@ -117,18 +116,25 @@ Enter a start address and a destination location above, then click <b>Navigate</
 <div><span class="report-kicker">MAP REPORT</span><h2 id="mapHazardTitle">Mark a hazard</h2></div>
 <button class="report-close" id="closeMapHazard" type="button" aria-label="Close hazard report">×</button>
 </div>
-<p class="report-help" id="mapHazardHelp">Click anywhere on the map to place a hazard marker, or use the plus button to choose a location.</p>
+<p class="report-help" id="mapHazardHelp">Your current location will be selected automatically. You can also click anywhere on the map to move the hazard pin.</p>
 <form id="mapHazardForm">
-<label for="mapHazardCategory">Hazard type</label>
-<select id="mapHazardCategory" required>
-<option value="">Select a type</option><option>Road Damage</option><option>Flooding</option><option>Debris</option><option>Accident</option><option>Weather</option><option>Other</option>
-</select>
 <label for="mapHazardTitleInput">Title</label>
 <input id="mapHazardTitleInput" type="text" placeholder="What should drivers know?" required minlength="3">
+<label for="mapHazardCategory">Category</label>
+<select id="mapHazardCategory" required>
+<option value="">Select...</option><option>Road Damage</option><option>Flooding</option><option>Debris</option><option>Accident</option><option>Weather</option><option>Other</option>
+</select>
 <label for="mapHazardSeverity">Severity</label>
 <select id="mapHazardSeverity"><option>Low</option><option selected>Medium</option><option>High</option></select>
-<label for="mapHazardDescription">Details <span>(optional)</span></label>
+<label for="mapHazardLocation">Location</label>
+<input id="mapHazardLocation" type="text" placeholder="Locating your current position..." required>
+<label for="mapHazardDescription">Description <span>(optional)</span></label>
 <textarea id="mapHazardDescription" rows="3" placeholder="Add useful context..."></textarea>
+<div class="report-switch"><input id="mapHazardScheduleToggle" type="checkbox"><label for="mapHazardScheduleToggle">This hazard has a time window</label></div>
+<div class="report-time-window" id="mapHazardScheduleFields" hidden>
+<div><label for="mapHazardStart">Start</label><input id="mapHazardStart" type="datetime-local"></div>
+<div><label for="mapHazardEnd">End</label><input id="mapHazardEnd" type="datetime-local"></div>
+</div>
 <div class="report-coordinates" id="mapHazardCoordinates">No map location selected yet.</div>
 <div class="report-modal-actions"><button class="btn btn-secondary" id="cancelMapHazard" type="button">Cancel</button><button class="btn btn-primary" type="submit">Report hazard</button></div>
 </form>
@@ -136,7 +142,6 @@ Enter a start address and a destination location above, then click <b>Navigate</
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
