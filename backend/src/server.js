@@ -15,8 +15,6 @@ const MAX_SEVERITY_LENGTH = 40;
 const MAX_LOCATION_LENGTH = 300;
 const MAX_DESCRIPTION_LENGTH = 2000;
 
-// In-memory storage is intentionally simple. Hazards are lost when the server restarts.
-// Use a database if hazard reports must persist across restarts or multiple instances.
 const hazards = [];
 
 app.disable('x-powered-by');
@@ -81,7 +79,6 @@ function combineRoutingHazards(requestedHazards) {
     const hazard = normalizeHazardForRouting(rawHazard);
     if (!hazard || !isHazardActive(hazard)) continue;
 
-    // Server-stored reports and their client-submitted copies should be counted once.
     const key = hazard.id || `${hazard.coordinates.lat.toFixed(6)},${hazard.coordinates.lng.toFixed(6)}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -173,7 +170,6 @@ app.post('/api/hazards', (req, res) => {
       });
     }
 
-    // Store normalized ISO timestamps rather than arbitrary date strings.
     start = new Date(startTime).toISOString();
     end = new Date(endTime).toISOString();
   }
@@ -215,7 +211,6 @@ app.use((_req, res) => {
 });
 
 app.use((error, _req, res, _next) => {
-  // Malformed JSON and oversized payloads should be client errors, not generic 500s.
   if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
     return res.status(400).json({ error: 'Request body contains invalid JSON.' });
   }

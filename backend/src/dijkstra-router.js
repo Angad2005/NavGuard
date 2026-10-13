@@ -16,7 +16,7 @@ const OSRM_BASE_URL = (process.env.OSRM_BASE_URL || 'https://router.project-osrm
 const OVERPASS_USER_AGENT = process.env.OVERPASS_USER_AGENT || 'NaviGuard/1.0 (OpenStreetMap route planner)';
 const MAX_GRAPH_AREA_DEGREES = Number(process.env.MAX_GRAPH_AREA_DEGREES) || 0.3;
 const MAX_SNAP_DISTANCE_METERS = Number(process.env.MAX_SNAP_DISTANCE_METERS) || 2500;
-const DEFAULT_HAZARD_RADIUS_METERS = 100; // Keep in sync with frontend/main.js.
+const DEFAULT_HAZARD_RADIUS_METERS = 100;
 
 const ROAD_TYPES = [
   'motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified',
@@ -115,7 +115,6 @@ function distanceMeters(a, b) {
 }
 
 function distanceToSegmentMeters(point, start, end) {
-  // Project the points into a local metre-based coordinate system around the hazard.
   const latitudeScale = 111320;
   const longitudeScale = latitudeScale * Math.cos(Number(point.lat) * Math.PI / 180);
   const px = Number(point.lng) * longitudeScale;
@@ -165,8 +164,6 @@ function graphBounds(start, end) {
   const west = Math.min(start.lng, end.lng) - padding;
   const east = Math.max(start.lng, end.lng) + padding;
 
-  // Do not silently crop the bounds: doing so can exclude the start/end and produce
-  // misleading "no route" results. The current implementation is for local routes.
   if ((north - south) > MAX_GRAPH_AREA_DEGREES || (east - west) > MAX_GRAPH_AREA_DEGREES) {
     const error = new Error(
       `The selected locations are too far apart for local road-graph routing. `
@@ -220,7 +217,6 @@ async function fetchOverpass(endpoint, query) {
       signal: controller.signal
     });
 
-    // A fallback GET is attempted only when the POST is rejected as not acceptable.
     if (response.status === 406) {
       const separator = endpoint.includes('?') ? '&' : '?';
       response = await fetch(`${endpoint}${separator}data=${encodeURIComponent(query)}`, {
@@ -368,9 +364,13 @@ function shortestPath(graph, startId, endId, hazards, bannedEdges = new Set()) {
 
     for (const edge of graph.adjacency.get(current.id) || []) {
       if (bannedEdges.has(edge.id)) continue;
-      if (edgeTouchesHazard(edge, hazards, DEFAULT_HAZARD_RADIUS_METERS)) continue;
+      
+      // Apply a cost penalty for touching hazards instead of hard blocking,
+      // allowing alternative routes to bypass hazards smoothly.
+      const touchesHazard = edgeTouchesHazard(edge, hazards, DEFAULT_HAZARD_RADIUS_METERS);
+      const hazardPenalty = touchesHazard ? 600 : 0;
 
-      const nextCost = current.cost + edge.durationSeconds;
+      const nextCost = current.cost + edge.durationSeconds + hazardPenalty;
       if (nextCost < (costs.get(edge.toId) ?? Infinity)) {
         costs.set(edge.toId, nextCost);
         previous.set(edge.toId, { nodeId: current.id, edge });
@@ -624,12 +624,10 @@ async function calculateOsrmRoutes(start, end, hazards, limit) {
   if (!response.ok || !payload || payload.code !== 'Ok' || !Array.isArray(payload.routes)) {
     const reason = payload && payload.message ? payload.message : `HTTP ${response.status}`;
     const error = new Error(`Long-distance routing failed: ${reason}. Try another destination or configure OSRM_BASE_URL.`);
-    error.status = response.ok ? 502 : 502;
+    error.status = 502;
     throw error;
   }
 
-  // The public OSRM endpoint supplies only a limited number of alternatives. Keep
-  // only routes whose full geometry remains outside the configured hazard radius.
   return payload.routes
     .map(normalizeOsrmRoute)
     .filter((route) => route.geometry && route.geometry.type === 'LineString')
@@ -651,8 +649,6 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
   try {
     graph = await loadOsmGraph(safeStart, safeEnd);
   } catch (error) {
-    // Overpass is suitable for local graphs, but very large bounding boxes can
-    // overload public map-data servers. Use OSRM for these longer trips instead.
     if (error && error.code === 'LOCAL_GRAPH_AREA_EXCEEDED') {
       return calculateOsrmRoutes(safeStart, safeEnd, safeHazards, routeLimit);
     }
@@ -692,7 +688,6 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
     if (signatures.has(signature)) return;
     signatures.add(signature);
     candidates.push(routeFromEdges(edges, safeStart, safeEnd, startNode.point, endNode.point));
-    // Ban each edge independently to discover alternate paths without banning hazards.
     for (const edge of edges) pendingBans.push(new Set([edge.id]));
   }
 

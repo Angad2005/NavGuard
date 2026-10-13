@@ -1,4 +1,4 @@
-(() => {
+(async () => {
   let session = null;
   try {
     session = JSON.parse(localStorage.getItem('rp_session') || 'null');
@@ -167,7 +167,18 @@
   let routeCandidates = [];
   let selectedRouteIndex = 0;
   let routingRequestId = 0;
+  let hazardLayers = [];
   const HAZARD_AVOIDANCE_RADIUS_METERS = 100;
+
+  function getHazardColor(category, severity) {
+    const cat = (category || '').toLowerCase();
+    const sev = (severity || '').toLowerCase();
+    if (sev === 'high' || cat === 'accident') return '#d93025'; // Red
+    if (sev === 'medium' || cat === 'construction') return '#f2994a'; // Orange
+    if (cat === 'weather') return '#2f80ed'; // Blue
+    if (cat === 'police' || cat === 'speed camera') return '#9b51e0'; // Purple
+    return '#27ae60'; // Green / Default
+  }
 
   async function geocodeAddress(addressQuery) {
     if (!addressQuery) return null;
@@ -382,19 +393,21 @@
   });
   function resetPlaceholder() { document.getElementById('directionsContainer').innerHTML = '<div class="directions-placeholder" id="placeholderText">Enter a start address and a destination location above, then click <b>Navigate</b> to compare live routes.</div>'; }
 
-  // Global handler to delete a hazard via API
+  // Global handler to delete a hazard via API and refresh routes
   window.deleteHazard = async function (hazardId) {
     if (!confirm('Are you sure you want to remove this hazard?')) return;
     try {
       const response = await fetch(`/api/hazards/${hazardId}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Could not delete hazard.');
-      loadReportedHazards();
+      await loadReportedHazards();
+      if (startCoords && endCoords) {
+        await calculateAndDisplayRoute();
+      }
     } catch (error) {
       alert(error.message);
     }
   };
 
-  /* Hazard reporting: use the device location by default, while allowing a map pin override. */
   const mapHazardModal = document.getElementById('mapHazardModal');
   const mapHazardForm = document.getElementById('mapHazardForm');
   const mapHazardCoordinates = document.getElementById('mapHazardCoordinates');
@@ -513,19 +526,12 @@
       if (!response.ok) throw new Error(payload.error || 'Could not save hazard');
       mapHazardForm.reset();
       closeHazardReport();
-      if (hazardMarker) {
-        const newPopupHtml = `
-          <div>
-            <b>${escapeHtml(payload.data.title)}</b><br>
-            Reported hazard<br>
-            <button onclick="window.deleteHazard('${payload.data.id}')" style="margin-top:8px;background:#d93025;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px;">
-              Delete Hazard
-            </button>
-          </div>
-        `;
-        hazardMarker.bindPopup(newPopupHtml).openPopup();
+      await loadReportedHazards();
+
+      // Automatically recalculate routes when a new hazard is added between locations
+      if (startCoords && endCoords) {
+        await calculateAndDisplayRoute();
       }
-      loadReportedHazards();
     } catch (error) {
       mapHazardHelp.textContent = error.message;
       mapHazardHelp.style.color = 'var(--danger)';
@@ -534,23 +540,30 @@
 
   async function loadReportedHazards() {
     try {
+      // Clear existing hazard markers to prevent duplicate stacking
+      hazardLayers.forEach(layer => map.removeLayer(layer));
+      hazardLayers = [];
+
       const response = await fetch('/api/hazards');
       if (!response.ok) return;
       const payload = await response.json();
       (payload.data || []).filter(hazard => hazard.coordinates).forEach(hazard => {
         const point = L.latLng(hazard.coordinates.lat, hazard.coordinates.lng);
+        const color = getHazardColor(hazard.category, hazard.severity);
         const popupHtml = `
           <div>
             <b>${escapeHtml(hazard.title)}</b><br>
-            ${escapeHtml(hazard.severity)} severity<br>
+            Category: ${escapeHtml(hazard.category)}<br>
+            Severity: ${escapeHtml(hazard.severity)}<br>
             <button onclick="window.deleteHazard('${hazard.id}')" style="margin-top:8px;background:#d93025;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px;">
               Delete Hazard
             </button>
           </div>
         `;
-        L.circleMarker(point, { radius: 7, color: '#d93025', fillColor: '#d93025', fillOpacity: .82, weight: 2 })
+        const marker = L.circleMarker(point, { radius: 8, color: color, fillColor: color, fillOpacity: 0.85, weight: 2 })
           .addTo(map)
           .bindPopup(popupHtml);
+        hazardLayers.push(marker);
       });
     } catch (error) { console.warn('Could not load reported hazards:', error); }
   }
