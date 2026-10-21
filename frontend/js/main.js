@@ -325,8 +325,8 @@
       })
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Dijkstra routing service unavailable.');
-    if (!payload.data?.length) throw new Error('No drivable route exists on the current OpenStreetMap road graph.');
+    if (!response.ok) throw new Error(payload.error || 'Routing service unavailable.');
+    if (!payload.data?.length) throw new Error('No safe route was found around the active hazards.');
     return payload.data;
   }
   async function calculateAndDisplayRoute() {

@@ -13,6 +13,7 @@ const OVERPASS_URLS = (process.env.OVERPASS_URLS || process.env.OVERPASS_URL || 
 const OVERPASS_TIMEOUT_MS = Number(process.env.OVERPASS_TIMEOUT_MS) || 35000;
 const OSRM_TIMEOUT_MS = Number(process.env.OSRM_TIMEOUT_MS) || 20000;
 const OSRM_BASE_URL = (process.env.OSRM_BASE_URL || 'https://router.project-osrm.org').replace(/\/+$/, '');
+const ROUTING_ENGINE = String(process.env.ROUTING_ENGINE || 'osrm').toLowerCase();
 const OVERPASS_USER_AGENT = process.env.OVERPASS_USER_AGENT || 'NaviGuard/1.0 (OpenStreetMap route planner)';
 const MAX_GRAPH_AREA_DEGREES = Number(process.env.MAX_GRAPH_AREA_DEGREES) || 0.3;
 const MAX_SNAP_DISTANCE_METERS = Number(process.env.MAX_SNAP_DISTANCE_METERS) || 2500;
@@ -364,13 +365,15 @@ function shortestPath(graph, startId, endId, hazards, bannedEdges = new Set()) {
 
     for (const edge of graph.adjacency.get(current.id) || []) {
       if (bannedEdges.has(edge.id)) continue;
-      
-      // Apply a cost penalty for touching hazards instead of hard blocking,
-      // allowing alternative routes to bypass hazards smoothly.
-      const touchesHazard = edgeTouchesHazard(edge, hazards, DEFAULT_HAZARD_RADIUS_METERS);
-      const hazardPenalty = touchesHazard ? 600 : 0;
 
-      const nextCost = current.cost + edge.durationSeconds + hazardPenalty;
+      // A reported hazard is a road closure/avoidance constraint, not merely
+      // a preference. A finite penalty can still make the hazardous road win
+      // when the detour is longer, which means every generated alternative
+      // may continue through the hazard. Exclude those edges before running
+      // Dijkstra so both the recommended route and its alternatives are safe.
+      if (edgeTouchesHazard(edge, hazards, DEFAULT_HAZARD_RADIUS_METERS)) continue;
+
+      const nextCost = current.cost + edge.durationSeconds;
       if (nextCost < (costs.get(edge.toId) ?? Infinity)) {
         costs.set(edge.toId, nextCost);
         previous.set(edge.toId, { nodeId: current.id, edge });
@@ -593,7 +596,7 @@ function normalizeOsrmRoute(route) {
 async function calculateOsrmRoutes(start, end, hazards, limit) {
   const coordinates = `${start.lng},${start.lat};${end.lng},${end.lat}`;
   const url = `${OSRM_BASE_URL}/route/v1/driving/${coordinates}`
-    + `?alternatives=${encodeURIComponent(String(Math.max(1, limit)))}&steps=true&geometries=geojson&overview=full`;
+    + `?alternatives=true&steps=true&geometries=geojson&overview=full&continue_straight=false`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), OSRM_TIMEOUT_MS);
 
@@ -645,6 +648,22 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
   const safeEnd = { lat: Number(end.lat), lng: Number(end.lng) };
   const safeHazards = normalizeHazards(hazards);
   const routeLimit = Number.isInteger(limit) ? Math.max(1, Math.min(limit, 5)) : 3;
+
+  // OSRM is the primary engine. It uses a mature road-routing network and
+  // produces turn-by-turn alternatives more reliably than rebuilding a local
+  // Overpass graph for every request. Hazard-touching routes are filtered in
+  // calculateOsrmRoutes before they reach the client.
+  if (ROUTING_ENGINE !== 'dijkstra') {
+    try {
+      const osrmRoutes = await calculateOsrmRoutes(safeStart, safeEnd, safeHazards, routeLimit);
+      if (osrmRoutes.length > 0) return osrmRoutes;
+    } catch (error) {
+      // Fall through to the local graph so a temporary OSRM outage does not
+      // make navigation unusable.
+      console.warn('[NaviGuard] OSRM routing unavailable; using local fallback:', error.message);
+    }
+  }
+
   let graph;
   try {
     graph = await loadOsmGraph(safeStart, safeEnd);
