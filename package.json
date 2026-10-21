@@ -6,7 +6,8 @@
   "main": "backend/src/server.js",
   "scripts": {
     "start": "node backend/src/server.js",
-    "dev": "nodemon backend/src/server.js"
+    "dev": "nodemon backend/src/server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"

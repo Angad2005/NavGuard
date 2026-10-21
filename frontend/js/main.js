@@ -276,6 +276,7 @@
     if (!Number.isInteger(index) || index < 0 || index >= routeCandidates.length) return;
     selectedRouteIndex = index;
     routeLayers.forEach((layer, layerIndex) => layer.setStyle({ color: layerIndex === index ? '#1a73e8' : '#7aa7e8', opacity: layerIndex === index ? .95 : .42, weight: layerIndex === index ? 7 : 5 }));
+    routeLayers[index]?.bringToFront();
     document.querySelectorAll('.route-option').forEach((card, cardIndex) => card.classList.toggle('selected', cardIndex === index));
     renderSelectedRoute(routeCandidates[index]);
   }
@@ -329,13 +330,23 @@
     if (!payload.data?.length) throw new Error('No safe route was found around the active hazards.');
     return payload.data;
   }
-  async function calculateAndDisplayRoute() {
+  async function calculateAndDisplayRoute(additionalHazards = []) {
     const requestId = ++routingRequestId;
     const directionsContainer = document.getElementById('directionsContainer');
     directionsContainer.innerHTML = '<div class="route-loading"><span class="loading-dot"></span> Checking live route alternatives and marked hazards…</div>';
     clearRouteLayers();
     try {
-      const activeHazards = await loadActiveHazards();
+      const loadedHazards = await loadActiveHazards();
+      const activeHazards = [...new Map(
+        [...loadedHazards, ...additionalHazards]
+          .filter(hazard => hazard && isActiveHazard(hazard) && hazard.coordinates
+            && Number.isFinite(Number(hazard.coordinates.lat))
+            && Number.isFinite(Number(hazard.coordinates.lng)))
+          .map(hazard => [
+            hazard.id || `${Number(hazard.coordinates.lat).toFixed(6)},${Number(hazard.coordinates.lng).toFixed(6)}`,
+            hazard
+          ])
+      ).values()];
       if (requestId !== routingRequestId) return;
       const routes = await requestDijkstraRoutes(activeHazards);
       if (requestId !== routingRequestId) return;
@@ -355,6 +366,7 @@
       selectedRouteIndex = 0;
       routeLayers = routeCandidates.map((route, index) => L.geoJSON(route.geometry, { style: { color: index === 0 ? '#1a73e8' : '#7aa7e8', opacity: index === 0 ? .95 : .42, weight: index === 0 ? 7 : 5, lineCap: 'round', lineJoin: 'round' }, interactive: true }).addTo(map));
       routeLayers.forEach((layer, index) => layer.on('click', () => updateRouteSelection(index)));
+      routeLayers[0]?.bringToFront();
       renderSelectedRoute(routeCandidates[0]);
       const selectedGeometry = routeCandidates[0].geometry.coordinates.map(point => L.latLng(point[1], point[0]));
       map.fitBounds(L.latLngBounds(selectedGeometry), { padding: [55, 55], maxZoom: 15 });
@@ -524,13 +536,21 @@
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Could not save hazard');
+      const savedHazard = payload.data;
       mapHazardForm.reset();
       closeHazardReport();
-      await loadReportedHazards();
+      if (hazardMarker) map.removeLayer(hazardMarker);
+      hazardMarker = null;
+      selectedHazardPoint = null;
 
       // Automatically recalculate routes when a new hazard is added between locations
       if (startCoords && endCoords) {
-        await calculateAndDisplayRoute();
+        await Promise.all([
+          loadReportedHazards(),
+          calculateAndDisplayRoute(savedHazard ? [savedHazard] : [])
+        ]);
+      } else {
+        await loadReportedHazards();
       }
     } catch (error) {
       mapHazardHelp.textContent = error.message;
