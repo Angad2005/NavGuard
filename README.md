@@ -97,7 +97,7 @@ Example health response:
 
 ## Routing behavior
 
-The route planner first requests OSRM alternatives and filters out paths within 100 meters of an active hazard. It supplements these with up to three distinct paths from an OpenStreetMap road graph when needed. The graph respects one-way streets and uses Yen's k-shortest-path algorithm over Dijkstra searches, excluding hazard-adjacent edges. If the local graph cannot find a safe path, OSRM routes through detour points generated from the affected route segments. Every returned path is checked against active hazards.
+The route planner first requests OSRM alternatives and filters out paths within 100 meters of an active hazard. It returns safe OSRM routes immediately, so ordinary navigation does not wait for a local road-graph download. If all OSRM alternatives cross an active hazard, it first asks OSRM to route through detour points on either side of the affected road segment. The local OpenStreetMap graph is the fallback when OSRM cannot produce a safe route; it respects one-way streets and uses Yen's k-shortest-path algorithm over Dijkstra searches, excluding hazard-adjacent edges. Every returned path is checked against active hazards.
 
 The Overpass client sends an explicit `Accept` header, a descriptive `User-Agent`, and a standards-compliant form body. It automatically tries multiple public Overpass providers when one is rate-limited, unavailable, or rejects a request with HTTP 406. Providers can be customized with the comma-separated `OVERPASS_URLS` environment variable; see `.env.example`.
 

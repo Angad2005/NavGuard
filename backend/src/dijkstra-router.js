@@ -759,7 +759,9 @@ async function calculateOsrmRoutes(start, end, hazards, limit, { allowDetours = 
     const detouredRoutes = results.flat();
     const safeDetours = filterSafeRoutes(detouredRoutes, hazards, limit);
     combinedRoutes = mergeRouteCandidates([combinedRoutes, safeDetours], hazards, limit);
-    if (combinedRoutes.length >= limit) return combinedRoutes;
+    // One verified detour is enough to resume navigation. Avoid extra OSRM
+    // waypoint batches once the app has a route that clears every hazard.
+    if (combinedRoutes.length > 0) return combinedRoutes;
   }
 
   return combinedRoutes;
@@ -967,10 +969,22 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
   const safeHazards = normalizeHazards(hazards);
   const routeLimit = Number.isInteger(limit) ? Math.max(1, Math.min(limit, 5)) : 3;
 
-  // Start with OSRM's alternatives, then supplement them from the local graph
-  // when OSRM returns fewer than the requested number of distinct routes.
+  // Use OSRM first. The local graph is a fallback when OSRM cannot provide a
+  // safe route, rather than a required second source for every request.
   let primaryOsrmRoutes = null;
   let safeOsrmRoutes = [];
+  let osrmDetourRoutes = null;
+  async function getOsrmDetourRoutes() {
+    if (osrmDetourRoutes === null) {
+      osrmDetourRoutes = primaryOsrmRoutes
+        ? await tryOsrmHazardDetour(
+          safeStart, safeEnd, safeHazards, routeLimit, primaryOsrmRoutes
+        )
+        : [];
+    }
+    return osrmDetourRoutes;
+  }
+
   if (ROUTING_ENGINE !== 'dijkstra') {
     try {
       primaryOsrmRoutes = await requestOsrmRoutes(safeStart, safeEnd);
@@ -979,7 +993,9 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
         safeHazards,
         routeLimit
       );
-      if (safeOsrmRoutes.length >= routeLimit) return safeOsrmRoutes;
+      // OSRM's safe routes are already usable. Avoid the slower Overpass graph
+      // request just to fill comparison cards with extra alternatives.
+      if (safeOsrmRoutes.length > 0) return safeOsrmRoutes;
     } catch (error) {
       // Fall through to the local graph so a temporary OSRM outage does not
       // make navigation unusable.
@@ -987,20 +1003,27 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
     }
   }
 
+  // If every regular OSRM alternative crosses a hazard, try waypoint-based
+  // detours before downloading and rebuilding the local road graph.
+  if (safeHazards.length > 0 && primaryOsrmRoutes) {
+    const detouredRoutes = await getOsrmDetourRoutes();
+    if (detouredRoutes.length > 0) return detouredRoutes;
+  }
+
   let graph;
   try {
     graph = await loadOsmGraph(safeStart, safeEnd);
   } catch (error) {
     if (error && error.code === 'LOCAL_GRAPH_AREA_EXCEEDED') {
-      const osrmRoutes = await calculateOsrmRoutes(safeStart, safeEnd, safeHazards, routeLimit, {
-        allowDetours: true,
-        baseRoutes: primaryOsrmRoutes
-      });
+      const osrmRoutes = primaryOsrmRoutes
+        ? await getOsrmDetourRoutes()
+        : await calculateOsrmRoutes(safeStart, safeEnd, safeHazards, routeLimit, {
+          allowDetours: true,
+          baseRoutes: primaryOsrmRoutes
+        });
       return mergeRouteCandidates([safeOsrmRoutes, osrmRoutes], safeHazards, routeLimit);
     }
-    const detouredRoutes = await tryOsrmHazardDetour(
-      safeStart, safeEnd, safeHazards, routeLimit, primaryOsrmRoutes
-    );
+    const detouredRoutes = await getOsrmDetourRoutes();
     const fallbackRoutes = mergeRouteCandidates(
       [safeOsrmRoutes, detouredRoutes], safeHazards, routeLimit
     );
@@ -1009,9 +1032,7 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
   }
 
   if (graph.nodes.size === 0) {
-    const detouredRoutes = await tryOsrmHazardDetour(
-      safeStart, safeEnd, safeHazards, routeLimit, primaryOsrmRoutes
-    );
+    const detouredRoutes = await getOsrmDetourRoutes();
     const fallbackRoutes = mergeRouteCandidates(
       [safeOsrmRoutes, detouredRoutes], safeHazards, routeLimit
     );
@@ -1024,9 +1045,7 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
   const startNode = nearestNode(graph, safeStart);
   const endNode = nearestNode(graph, safeEnd);
   if (!startNode || !endNode) {
-    const detouredRoutes = await tryOsrmHazardDetour(
-      safeStart, safeEnd, safeHazards, routeLimit, primaryOsrmRoutes
-    );
+    const detouredRoutes = await getOsrmDetourRoutes();
     const fallbackRoutes = mergeRouteCandidates(
       [safeOsrmRoutes, detouredRoutes], safeHazards, routeLimit
     );
@@ -1036,9 +1055,7 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
     throw error;
   }
   if (startNode.distance > MAX_SNAP_DISTANCE_METERS || endNode.distance > MAX_SNAP_DISTANCE_METERS) {
-    const detouredRoutes = await tryOsrmHazardDetour(
-      safeStart, safeEnd, safeHazards, routeLimit, primaryOsrmRoutes
-    );
+    const detouredRoutes = await getOsrmDetourRoutes();
     const fallbackRoutes = mergeRouteCandidates(
       [safeOsrmRoutes, detouredRoutes], safeHazards, routeLimit
     );
@@ -1052,9 +1069,7 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
 
   const firstPath = shortestPath(graph, startNode.id, endNode.id, safeHazards);
   if (!firstPath) {
-    const detouredRoutes = await tryOsrmHazardDetour(
-      safeStart, safeEnd, safeHazards, routeLimit, primaryOsrmRoutes
-    );
+    const detouredRoutes = await getOsrmDetourRoutes();
     return mergeRouteCandidates([safeOsrmRoutes, detouredRoutes], safeHazards, routeLimit);
   }
 
@@ -1070,9 +1085,7 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
   );
   if (localAndOsrmRoutes.length >= routeLimit) return localAndOsrmRoutes;
 
-  const detouredRoutes = await tryOsrmHazardDetour(
-    safeStart, safeEnd, safeHazards, routeLimit, primaryOsrmRoutes
-  );
+  const detouredRoutes = await getOsrmDetourRoutes();
   return mergeRouteCandidates(
     [localAndOsrmRoutes, detouredRoutes], safeHazards, routeLimit
   );

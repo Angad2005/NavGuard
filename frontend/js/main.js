@@ -161,6 +161,7 @@
 
   let startCoords = null;
   let endCoords = null;
+  let endLocationName = null;
   let startMarker = null;
   let endMarker = null;
   let routeLayers = [];
@@ -308,10 +309,13 @@
     const summaryText = hasHazards
       ? `${(route.distance / 1000).toFixed(1)} km · <span style="color:var(--danger)">Passes ${route.hazardCount} active hazard${route.hazardCount === 1 ? '' : 's'}</span>`
       : `${(route.distance / 1000).toFixed(1)} km · Avoids all active hazards`;
+    const routeComparison = routeCandidates.length > 1
+      ? `<div class="route-options-label">Compare routes</div><div class="route-options">${renderRouteOptions()}</div>`
+      : '';
 
     document.getElementById('directionsContainer').innerHTML = `
       <div class="route-summary"><div><span class="route-kicker">RECOMMENDED ROUTE</span><h3>${formatDuration(route.duration)}</h3><p>${summaryText}</p></div>${summaryBadge}</div>
-      <div class="route-options-label">Compare routes</div><div class="route-options">${renderRouteOptions()}</div>
+      ${routeComparison}
       <div class="directions-title">Turn-by-turn directions</div><ol class="turn-list">${directions || '<li>Follow the highlighted route to your destination.</li>'}</ol>`;
     document.querySelectorAll('.route-option').forEach(card => card.addEventListener('click', () => updateRouteSelection(Number(card.dataset.routeIndex))));
   }
@@ -377,8 +381,10 @@
   }
 
   document.getElementById('routeBtn').addEventListener('click', async () => {
-    const startQuery = document.getElementById('startInput').value.trim();
-    const endQuery = document.getElementById('endInput').value.trim();
+    const startInput = document.getElementById('startInput');
+    const endInput = document.getElementById('endInput');
+    const startQuery = startInput.value.trim();
+    const endQuery = endInput.value.trim();
     if (!endQuery) { alert('Please enter a destination.'); return; }
     if (!startCoords && startQuery) {
       const resolvedStart = await geocodeAddress(startQuery);
@@ -388,18 +394,34 @@
       startMarker = L.marker(startCoords).addTo(map).bindPopup(`Start: ${escapeHtml(resolvedStart.name)}`);
     }
     if (!startCoords) { alert('Please enter a starting point or use GPS.'); return; }
-    const resolvedEnd = await geocodeAddress(endQuery);
-    if (!resolvedEnd) { alert('Could not resolve the destination.'); return; }
-    endCoords = L.latLng(resolvedEnd.lat, resolvedEnd.lng);
+    if (!endCoords) {
+      const resolvedEnd = await geocodeAddress(endQuery);
+      if (!resolvedEnd) { alert('Could not resolve the destination.'); return; }
+      endCoords = L.latLng(resolvedEnd.lat, resolvedEnd.lng);
+      endLocationName = resolvedEnd.name;
+    }
     if (endMarker) map.removeLayer(endMarker);
-    endMarker = L.marker(endCoords).addTo(map).bindPopup(`Destination: ${escapeHtml(resolvedEnd.name)}`).openPopup();
+    endMarker = L.marker(endCoords).addTo(map).bindPopup(`Destination: ${escapeHtml(endLocationName || endQuery)}`).openPopup();
     await calculateAndDisplayRoute();
+  });
+
+  document.getElementById('startInput').addEventListener('input', () => {
+    startCoords = null;
+    if (startMarker) map.removeLayer(startMarker);
+    startMarker = null;
+  });
+  document.getElementById('endInput').addEventListener('input', () => {
+    endCoords = null;
+    endLocationName = null;
+    if (endMarker) map.removeLayer(endMarker);
+    endMarker = null;
   });
 
   document.getElementById('clearBtn').addEventListener('click', () => {
     routingRequestId += 1; clearRouteLayers(); routeCandidates = [];
     if (startMarker) map.removeLayer(startMarker); if (endMarker) map.removeLayer(endMarker);
     startCoords = null; endCoords = null; startMarker = null; endMarker = null; selectedRouteIndex = 0;
+    endLocationName = null;
     document.getElementById('startInput').value = ''; document.getElementById('endInput').value = '';
     resetPlaceholder(); map.flyTo([28.6139, 77.2090], 12);
   });

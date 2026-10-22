@@ -146,7 +146,7 @@ test('posting a hazard on the current route makes the route API return a clear d
   assert.notEqual(alternateRoute.distance, originalRoute.distance);
 });
 
-test('OSRM is asked for a detour when its normal route crosses a hazard and the local graph is empty', async () => {
+test('safe OSRM routes skip Overpass and hazard detours run before the local graph fetch', async () => {
   const routerPath = require.resolve('../src/dijkstra-router');
   const cachedRouter = require.cache[routerPath];
   const originalRoutingEngine = process.env.ROUTING_ENGINE;
@@ -158,6 +158,7 @@ test('OSRM is asked for a detour when its normal route crosses a hazard and the 
 
   let osrmRequests = 0;
   let forcedWaypointRequests = 0;
+  let overpassRequests = 0;
   global.fetch = async (url, options = {}) => {
     if (String(url).startsWith('https://osrm.test/')) {
       osrmRequests += 1;
@@ -179,6 +180,7 @@ test('OSRM is asked for a detour when its normal route crosses a hazard and the 
       })), { status: 200, headers: { 'content-type': 'application/json' } });
     }
 
+    overpassRequests += 1;
     assert.equal(options.method, 'POST');
     return new Response(JSON.stringify({ elements: [] }), {
       status: 200,
@@ -197,9 +199,21 @@ test('OSRM is asked for a detour when its normal route crosses a hazard and the 
 
     assert.equal(osrmRequests, 3, 'one normal route request and two detour-side requests are expected');
     assert.equal(forcedWaypointRequests, 2, 'both detour requests should include two waypoints around the hazard');
+    assert.equal(overpassRequests, 0, 'a successful OSRM detour should avoid the slower graph download');
     assert.ok(routes.length > 0, 'a safe OSRM detour should be returned');
     assert.ok(routes.every((route) => !routeComesWithinMeters(route, { lat: 0, lng: 0.005 }, 100)));
     assert.ok(routes[0].geometry.coordinates.some(([, lat]) => lat > 0.001));
+
+    osrmRequests = 0;
+    const ordinaryRoutes = await calculateDijkstraRoutes(
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 0.01 },
+      [],
+      3
+    );
+    assert.equal(osrmRequests, 1, 'a validated ordinary OSRM route should return after its first request');
+    assert.equal(overpassRequests, 0, 'ordinary navigation should not fetch the local graph after OSRM succeeds');
+    assert.equal(ordinaryRoutes.length, 1);
   } finally {
     global.fetch = previousFetch;
     if (originalRoutingEngine === undefined) delete process.env.ROUTING_ENGINE;
