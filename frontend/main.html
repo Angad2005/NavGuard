@@ -1,147 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>NaviGuard — Directions</title>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="css/main.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NaviGuard — Map & Live Detour Navigation</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'><path d='M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z'/></svg>" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="dist/assets/app.css" />
 </head>
 <body>
-<div class="sidebar">
-<div class="sidebar-header">
-<span class="logo">🗺️</span>
-<h2>RoutePlanner</h2>
-<div class="header-icons">
-<a class="icon-btn dashboard-link" href="Hazard.html" title="Open hazard dashboard" aria-label="Open hazard dashboard">⚠️</a>
-<button class="icon-btn" id="accessibilityBtn" title="Accessibility settings" aria-label="Accessibility settings" aria-haspopup="true">♿</button>
-<button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings" aria-haspopup="true">⚙️</button>
-</div>
-
-<div class="dropdown-panel" id="accessibilityPanel">
-<h3>Accessibility</h3>
-
-<div class="panel-group">
-<label for="fontSelect">Font</label>
-<select id="fontSelect">
-<option value="font-default">Default</option>
-<option value="font-readable">Readable (sans-serif)</option>
-<option value="font-serif">Serif</option>
-</select>
-</div>
-
-<div class="panel-group">
-<label>Text Size</label>
-<div class="size-btns">
-<button class="size-btn" data-size="fs-small">A-</button>
-<button class="size-btn" data-size="fs-medium">A</button>
-<button class="size-btn" data-size="fs-large">A+</button>
-<button class="size-btn" data-size="fs-xlarge">A++</button>
-</div>
-</div>
-
-<div class="panel-group">
-<label>Color Mode</label>
-<div class="color-btns">
-<button class="color-btn" data-contrast="">Normal</button>
-<button class="color-btn" data-contrast="contrast-high">High Contrast</button>
-<button class="color-btn" data-contrast="contrast-warm">Warm</button>
-</div>
-</div>
-</div>
-
-<div class="dropdown-panel" id="settingsPanel">
-<h3>Settings</h3>
-
-<div class="panel-group">
-<label>Appearance</label>
-<div class="theme-toggle-row">
-
-<button class="theme-opt" data-theme="light">☀️ Light</button>
-<button class="theme-opt" data-theme="dark">🌙 Dark</button>
-</div>
-</div>
-
-<hr class="panel-divider">
-
-<button class="logout-btn-full" id="signOutBtn">🚪 Sign out</button>
-</div>
-</div>
-
-<div class="user-chip">
-<div class="avatar" id="avatar">?</div>
-<div class="user-info">
-<strong id="userName">Guest</strong>
-<span id="userEmail">Not signed in</span>
-</div>
-</div>
-
-<div class="search-panel">
-<div class="input-group">
-<label for="startInput">Starting Point</label>
-<div class="input-wrapper">
-<input type="text" id="startInput" placeholder="Choose starting point..." />
-<button class="gps-btn" id="startGpsBtn" title="Use my location">🎯</button>
-</div>
-</div>
-
-<div class="input-group">
-<label for="endInput">Destination</label>
-<div class="input-wrapper">
-<input type="text" id="endInput" placeholder="Choose destination..." />
-</div>
-</div>
-
-<div class="actions">
-<button class="btn btn-secondary" id="clearBtn">Clear</button>
-<button class="btn btn-primary" id="routeBtn">Navigate</button>
-</div>
-</div>
-
-<div class="directions-panel" id="directionsContainer">
-<div class="directions-placeholder" id="placeholderText">
-Enter a start address and a destination location above, then click <b>Navigate</b> to generate directions.
-</div>
-</div>
-</div>
-
-<div id="map"></div>
-
-<button class="map-report-btn" id="mapReportBtn" type="button" title="Report a hazard at my current location" aria-label="Report a hazard at my current location">+</button>
-
-<div class="report-modal" id="mapHazardModal" aria-hidden="true">
-<div class="report-modal-card" role="dialog" aria-modal="true" aria-labelledby="mapHazardTitle">
-<div class="report-modal-header">
-<div><span class="report-kicker">MAP REPORT</span><h2 id="mapHazardTitle">Mark a hazard</h2></div>
-<button class="report-close" id="closeMapHazard" type="button" aria-label="Close hazard report">×</button>
-</div>
-<p class="report-help" id="mapHazardHelp">Your current location will be selected automatically. You can also click anywhere on the map to move the hazard pin.</p>
-<form id="mapHazardForm">
-<label for="mapHazardTitleInput">Title</label>
-<input id="mapHazardTitleInput" type="text" placeholder="What should drivers know?" required minlength="3">
-<label for="mapHazardCategory">Category</label>
-<select id="mapHazardCategory" required>
-<option value="">Select...</option><option>Road Damage</option><option>Flooding</option><option>Debris</option><option>Accident</option><option>Weather</option><option>Other</option>
-</select>
-<label for="mapHazardSeverity">Severity</label>
-<select id="mapHazardSeverity"><option>Low</option><option selected>Medium</option><option>High</option></select>
-<label for="mapHazardLocation">Location</label>
-<input id="mapHazardLocation" type="text" placeholder="Locating your current position..." required>
-<label for="mapHazardDescription">Description <span>(optional)</span></label>
-<textarea id="mapHazardDescription" rows="3" placeholder="Add useful context..."></textarea>
-<div class="report-switch"><input id="mapHazardScheduleToggle" type="checkbox"><label for="mapHazardScheduleToggle">This hazard has a time window</label></div>
-<div class="report-time-window" id="mapHazardScheduleFields" hidden>
-<div><label for="mapHazardStart">Start</label><input id="mapHazardStart" type="datetime-local"></div>
-<div><label for="mapHazardEnd">End</label><input id="mapHazardEnd" type="datetime-local"></div>
-</div>
-<div class="report-coordinates" id="mapHazardCoordinates">No map location selected yet.</div>
-<div class="report-modal-actions"><button class="btn btn-secondary" id="cancelMapHazard" type="button">Cancel</button><button class="btn btn-primary" type="submit">Report hazard</button></div>
-</form>
-</div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="js/main.js"></script>
+  <div id="root"></div>
+  <noscript>
+    <div style="padding: 2rem; text-align: center; font-family: sans-serif;">
+      <h2>JavaScript Required</h2>
+      <p>NaviGuard requires JavaScript to be enabled in order to run.</p>
+    </div>
+  </noscript>
+  <script type="module" src="dist/assets/app.js"></script>
 </body>
 </html>

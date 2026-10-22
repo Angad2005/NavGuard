@@ -1,73 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>RoutePlanner — Login / Sign Up</title>
-<link rel="stylesheet" href="css/login.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NaviGuard — Safety-First Route Planner & Hazard Intelligence</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'><path d='M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z'/></svg>" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="dist/assets/app.css" />
 </head>
 <body>
-<div class="auth-card">
-<div class="brand">
-<div class="logo">🗺️</div>
-<h1>RoutePlanner</h1>
-<p>Sign in to save your routes and places</p>
-</div>
-
-<div class="tabs">
-<button class="tab active" id="loginTab">Login</button>
-<button class="tab" id="signupTab">Sign Up</button>
-</div>
-
-<div class="msg" id="message"></div>
-
-<form id="loginForm">
-<div class="field">
-<label for="loginEmail">Email</label>
-<input type="email" id="loginEmail" placeholder="you@example.com" required />
-</div>
-
-<div class="field">
-<label for="loginPassword">Password</label>
-<input type="password" id="loginPassword" placeholder="Enter your password" required />
-</div>
-
-<div class="row">
-<label><input type="checkbox" id="remember" /> Remember me</label>
-<a href="#" id="forgot">Forgot password?</a>
-</div>
-
-<button class="btn" type="submit">Login</button>
-</form>
-
-<form id="signupForm" class="hidden">
-<div class="field">
-<label for="signupName">Full name</label>
-<input type="text" id="signupName" placeholder="Your name" required />
-</div>
-
-<div class="field">
-<label for="signupEmail">Email</label>
-<input type="email" id="signupEmail" placeholder="you@example.com" required />
-</div>
-
-<div class="field">
-<label for="signupPassword">Password</label>
-<input type="password" id="signupPassword" placeholder="At least 6 characters" required />
-</div>
-
-<div class="field">
-<label for="confirmPassword">Confirm password</label>
-<input type="password" id="confirmPassword" placeholder="Re-enter password" required />
-</div>
-
-<button class="btn" type="submit">Create account</button>
-</form>
-
-<div class="divider">or</div>
-<button class="btn-ghost" id="guestBtn">Continue as guest</button>
-</div>
-
-<script src="js/login.js"></script>
+  <div id="root"></div>
+  <noscript>
+    <div style="padding: 2rem; text-align: center; font-family: sans-serif;">
+      <h2>JavaScript Required</h2>
+      <p>NaviGuard requires JavaScript to be enabled in order to run.</p>
+    </div>
+  </noscript>
+  <script type="module" src="dist/assets/app.js"></script>
 </body>
 </html>

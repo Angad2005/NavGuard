@@ -4,30 +4,39 @@ NaviGuard is a safety-first navigation app that combines route planning with com
 
 ## Highlights
 
-- Interactive OpenStreetMap map with OSRM routes and a local OSM road-graph fallback
+- Integrated **React** component-based frontend architecture with a unified design system
+- Global theme and accessibility system (Light / Dark mode, High Contrast, Warm Sepia, adjustable typography and scaling)
+- Seamless navigation between Map & Detours, Hazard Dashboard, and User Authentication without full page reloads
+- Interactive OpenStreetMap map with Leaflet, OSRM routes, and local road-graph fallback
 - Hazard-aware edge blocking, route comparison cards, and highlighted safe-route selection
-- Browser geolocation support for the starting point
-- Hazard dashboard with active, scheduled, and expired states
-- Weather advisory lookup powered by Open-Meteo
-- Accessibility preferences, contrast modes, font choices, and dark theme
+- Community hazard reporting with GPS location or interactive map click
+- Hazard dashboard with active, scheduled, and expired status filtering and real-time pulse metrics
+- Weather advisory lookup powered by Open-Meteo with 1-click hazard creation
 - Express backend with static frontend hosting and a shared hazards API
-- Map reports are pinned by latitude/longitude and appear in the hazard dashboard
 
 ## Project structure
 
 ```text
 .
 ├── backend/
-│   └── src/
-│       └── server.js       # Express app, static hosting, and API routes
+│   ├── src/
+│   │   ├── dijkstra-router.js  # Routing engine, OSRM & OpenStreetMap graph
+│   │   └── server.js           # Express app, static hosting, and API routes
+│   └── test/                   # Routing and detour integration tests
 ├── frontend/
-│   ├── css/                # Page stylesheets
-│   ├── js/                 # Frontend behavior
-│   ├── Hazard.html         # Hazard dashboard
-│   ├── login.html          # Login and sign-up demo
-│   └── main.html           # Map and route planner
-├── .env.example
-├── .gitignore
+│   ├── dist/                   # Production-compiled React bundle (assets/app.js & app.css)
+│   ├── src/                    # React source code
+│   │   ├── components/         # Navbar, MapView, HazardDashboardView, LoginView, Modals, Toast
+│   │   ├── context/            # ThemeContext, SessionContext, HazardContext
+│   │   ├── styles/             # Unified design system & CSS tokens
+│   │   ├── utils/              # Geocoding, coordinates, and hazard math
+│   │   ├── App.jsx             # Top-level view switcher & notification coordinator
+│   │   └── index.jsx           # React DOM root entry point
+│   ├── Hazard.html             # Hazard dashboard entry page
+│   ├── login.html              # Login & sign-up entry page
+│   ├── main.html               # Map and route planner entry page
+│   └── index.html              # Vite dev server entry page
+├── vite.config.mjs             # Vite build configuration
 ├── package.json
 └── README.md
 ```
@@ -44,19 +53,25 @@ NaviGuard is a safety-first navigation app that combines route planning with com
 # Install dependencies
 npm install
 
+# Build the React frontend
+npm run build
+
 # Start the server
 npm start
 ```
 
-Then open [http://localhost:3000](http://localhost:3000). The server redirects the root URL to the login page. The other frontend pages are available at:
+Then open [http://localhost:3000](http://localhost:3000). The server serves the app at the root URL. All views (Map, Hazard Dashboard, Login) are unified in React with instant switching, and direct URLs remain fully supported:
 
 - [http://localhost:3000/main.html](http://localhost:3000/main.html)
 - [http://localhost:3000/Hazard.html](http://localhost:3000/Hazard.html)
 
-For development, use the automatic-reload script:
-
+For development:
 ```bash
+# Run backend with nodemon
 npm run dev
+
+# Or run Vite frontend dev server with hot-reload & API proxy
+npm run dev:frontend
 ```
 
 ## API
