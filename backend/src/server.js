@@ -7,10 +7,12 @@ const path = require('path');
 const sharp = require('sharp');
 const { randomUUID } = require('crypto');
 const { calculateDijkstraRoutes } = require('./dijkstra-router');
+const { generateNavAIResponse } = require('./navai-engine');
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT, 10) || 3000;
 const frontendPath = path.resolve(__dirname, '..', '..', 'frontend');
+const frontendDistPath = path.resolve(frontendPath, 'dist');
 const uploadDirectory = path.resolve(__dirname, '..', 'uploads');
 const MAX_JSON_BYTES = '100kb';
 const MAX_MULTIPART_FIELD_BYTES = 100 * 1024;
@@ -52,6 +54,9 @@ const upload = multer({
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: MAX_JSON_BYTES, strict: true }));
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+}
 app.use(express.static(frontendPath, { index: false }));
 app.use('/uploads', express.static(uploadDirectory, { maxAge: '1d' }));
 
@@ -261,6 +266,7 @@ app.post('/api/hazards', upload.single('image'), async (req, res, next) => {
       coordinates,
       imageUrl,
       window: { scheduled, start, end },
+      confirmations: 1,
       createdAt: new Date().toISOString()
     };
 
@@ -290,13 +296,48 @@ app.delete('/api/hazards/:id', async (req, res, next) => {
   return res.json({ data: removed });
 });
 
-app.get('/', (_req, res, next) => {
-  res.sendFile(path.join(frontendPath, 'login.html'), (error) => {
-    if (error) next(error);
-  });
+
+app.post('/api/navai/chat', async (req, res, next) => {
+  try {
+    const { message, telemetry, apiKey } = req.body || {};
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'message string is required.' });
+    }
+    const response = await generateNavAIResponse({
+      message,
+      telemetry: telemetry || {},
+      apiKey: typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : undefined
+    });
+    return res.json({ data: response });
+  } catch (error) {
+    return next(error);
+  }
 });
 
-app.use((_req, res) => {
+app.post('/api/hazards/:id/confirm', (req, res) => {
+  const hazard = hazards.find((h) => h.id === req.params.id);
+  if (!hazard) {
+    return res.status(404).json({ error: 'Hazard not found.' });
+  }
+  hazard.confirmations = (hazard.confirmations || 1) + 1;
+  return res.json({ data: hazard });
+});
+
+function sendFrontendIndex(_req, res, next) {
+  const distIndex = path.join(frontendDistPath, 'index.html');
+  const fallbackIndex = path.join(frontendPath, 'index.html');
+  const indexPath = fs.existsSync(distIndex) ? distIndex : fallbackIndex;
+  res.sendFile(indexPath, (error) => {
+    if (error) next(error);
+  });
+}
+
+app.get(['/', '/map', '/hazards'], sendFrontendIndex);
+
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+    return sendFrontendIndex(req, res, next);
+  }
   res.status(404).json({ error: 'Route not found.' });
 });
 

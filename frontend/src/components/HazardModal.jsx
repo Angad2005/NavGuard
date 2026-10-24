@@ -1,391 +1,417 @@
 import React, { useState, useEffect } from 'react';
 import { useHazards } from '../context/HazardContext';
 import { reverseGeocodePoint, getDeviceLocation } from '../utils/geo';
-import { X, AlertTriangle, MapPin, Calendar, Clock, Loader2 } from 'lucide-react';
+import {
+  X,
+  AlertTriangle,
+  Upload,
+  Calendar,
+  MapPin,
+  Clock,
+  Loader2,
+  Image as ImageIcon,
+  LocateFixed
+} from 'lucide-react';
 
-export function HazardModal({ isOpen, initialPoint, onClose, onCreated, onToast }) {
+const CATEGORIES = [
+  { id: 'Flooding', label: 'Flooding', icon: '🌊' },
+  { id: 'Road Damage', label: 'Road Damage', icon: '🚧' },
+  { id: 'Debris', label: 'Debris', icon: '🪵' },
+  { id: 'Accident', label: 'Accident', icon: '💥' },
+  { id: 'Construction', label: 'Construction', icon: '🏗️' },
+  { id: 'Other', label: 'Other', icon: '⚠️' }
+];
+
+const SEVERITIES = [
+  { id: 'Low', label: 'Low', color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/30' },
+  { id: 'Medium', label: 'Medium', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' },
+  { id: 'High', label: 'High', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30' },
+  { id: 'Critical', label: 'Critical', color: 'bg-red-600/10 text-red-600 dark:text-red-400 border-red-600/40' }
+];
+
+export function HazardModal({ isOpen, onClose, initialCoords, onToast, onHazardCreated }) {
   const { createHazard } = useHazards();
 
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState('Flooding');
   const [severity, setSeverity] = useState('Medium');
-  const [location, setLocation] = useState('');
+  const [locationName, setLocationName] = useState('');
   const [description, setDescription] = useState('');
+  const [coords, setCoords] = useState(initialCoords || null);
+
+  // Schedule Window State
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+
+  // Image Upload State
   const [imageFile, setImageFile] = useState(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
-  const [scheduled, setScheduled] = useState(false);
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [coordinates, setCoordinates] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
-  const [loadingLocation, setLoadingLocation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [locatingGps, setLocatingGps] = useState(false);
 
+  // Synchronize when initialCoords changes
+  useEffect(() => {
+    if (initialCoords && Number.isFinite(initialCoords.lat) && Number.isFinite(initialCoords.lng)) {
+      setCoords(initialCoords);
+      reverseGeocodePoint(initialCoords).then((name) => {
+        if (name && !locationName) {
+          setLocationName(name.split(',').slice(0, 2).join(',').trim());
+        }
+      });
+    }
+  }, [initialCoords]);
+
+  // Reset form when modal closes or opens
   useEffect(() => {
     if (!isOpen) {
       setTitle('');
-      setCategory('');
+      setCategory('Flooding');
       setSeverity('Medium');
-      setLocation('');
+      setLocationName('');
       setDescription('');
+      setIsScheduled(false);
+      setStartTime('');
+      setEndTime('');
       setImageFile(null);
-      setScheduled(false);
-      setStart('');
-      setEnd('');
-      setCoordinates(null);
-      setErrorMessage('');
-      return;
+      setImagePreview(null);
     }
-
-    async function resolveInitLocation() {
-      setLoadingLocation(true);
-      try {
-        let point = initialPoint;
-        if (!point) {
-          point = await getDeviceLocation();
-        }
-        setCoordinates(point);
-        const address = await reverseGeocodePoint(point);
-        setLocation(
-          address || `Pinned location (${point.lat.toFixed(5)}, ${point.lng.toFixed(5)})`
-        );
-      } catch (err) {
-        if (initialPoint) {
-          setCoordinates(initialPoint);
-          setLocation(
-            `Pinned location (${initialPoint.lat.toFixed(5)}, ${initialPoint.lng.toFixed(5)})`
-          );
-        } else {
-          setLocation('');
-        }
-      } finally {
-        setLoadingLocation(false);
-      }
-    }
-
-    resolveInitLocation();
-  }, [isOpen, initialPoint]);
-
-  useEffect(() => {
-    if (!imageFile) {
-      setImagePreviewUrl('');
-      return undefined;
-    }
-
-    const previewUrl = URL.createObjectURL(imageFile);
-    setImagePreviewUrl(previewUrl);
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [imageFile]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.mimetype || file.type)) {
+      if (onToast) onToast('Please select a JPEG, PNG, WebP, or GIF image.', 'error');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      if (onToast) onToast('Photo must be 5 MB or smaller.', 'error');
+      return;
+    }
+
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (evt) => setImagePreview(evt.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+  };
+
+  const handleUseGps = async () => {
+    setLocatingGps(true);
+    try {
+      const loc = await getDeviceLocation();
+      setCoords(loc);
+      const name = await reverseGeocodePoint(loc);
+      if (name) {
+        setLocationName(name.split(',').slice(0, 2).join(',').trim());
+      }
+      if (onToast) onToast('Location pinned to GPS coordinates.', 'info');
+    } catch (err) {
+      if (onToast) onToast(err.message || 'Could not fetch GPS coordinates.', 'warn');
+    } finally {
+      setLocatingGps(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setErrorMessage('');
-
-    if (!title.trim() || title.trim().length < 3) {
-      setErrorMessage('Title must be at least 3 characters long.');
+    if (!title.trim()) {
+      if (onToast) onToast('Please provide a title for the hazard.', 'warn');
       return;
     }
-    if (!category) {
-      setErrorMessage('Please select a hazard category.');
-      return;
-    }
-    if (!location.trim()) {
-      setErrorMessage('Location description is required.');
-      return;
-    }
-    if (imageFile && imageFile.size > 5 * 1024 * 1024) {
-      setErrorMessage('Image must be 5 MB or smaller.');
+    if (!locationName.trim()) {
+      if (onToast) onToast('Please provide a location description or landmark.', 'warn');
       return;
     }
 
-    if (scheduled) {
-      if (!start || !end) {
-        setErrorMessage('Start and end times are required for scheduled hazards.');
+    if (isScheduled) {
+      if (!startTime || !endTime) {
+        if (onToast) onToast('Please enter both start and end times for scheduled hazard.', 'warn');
         return;
       }
-      if (new Date(start) >= new Date(end)) {
-        setErrorMessage('Scheduled start time must be before end time.');
+      if (new Date(startTime).getTime() >= new Date(endTime).getTime()) {
+        if (onToast) onToast('Start time must be before end time.', 'warn');
         return;
       }
     }
 
     setSubmitting(true);
     try {
-      const hazardData = {
+      const payload = {
         title: title.trim(),
         category,
         severity,
-        location: location.trim(),
+        location: locationName.trim(),
         description: description.trim(),
-        coordinates: coordinates
-          ? { lat: coordinates.lat, lng: coordinates.lng }
+        coordinates: coords
+          ? {
+              lat: Number(Number(coords.lat).toFixed(6)),
+              lng: Number(Number(coords.lng).toFixed(6))
+            }
           : null,
         window: {
-          scheduled,
-          start: scheduled ? start : null,
-          end: scheduled ? end : null
+          scheduled: isScheduled,
+          start: isScheduled ? new Date(startTime).toISOString() : null,
+          end: isScheduled ? new Date(endTime).toISOString() : null
         }
       };
 
-      const created = await createHazard(hazardData, imageFile);
+      const created = await createHazard(payload, imageFile);
       if (onToast) onToast('Hazard reported successfully!', 'success');
-      if (onCreated) onCreated(created);
       onClose();
-    } catch (error) {
-      setErrorMessage(error.message || 'Failed to submit hazard report.');
+      if (onHazardCreated) onHazardCreated(created);
+    } catch (err) {
+      if (onToast) onToast(err.message || 'Failed to submit hazard.', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in">
       <div
-        className="modal-dialog"
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-2xl p-6 transition-all"
         onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="report-hazard-title"
       >
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <AlertTriangle size={20} style={{ color: 'var(--danger)' }} />
-            <h2 id="report-hazard-title" className="modal-title">
-              Report Route Hazard
-            </h2>
+        {/* Header */}
+        <div className="flex items-center justify-between pb-4 border-b border-slate-200/70 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">Report Road Hazard</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Help fellow drivers safely navigate around obstacles
+              </p>
+            </div>
           </div>
           <button
-            className="icon-btn"
-            onClick={onClose}
-            aria-label="Close"
             type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
-            <X size={18} />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            {errorMessage && (
-              <div
-                style={{
-                  background: 'var(--danger-light)',
-                  border: '1px solid var(--danger-border)',
-                  color: 'var(--danger)',
-                  padding: '0.65rem 0.85rem',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '0.85rem',
-                  fontWeight: 500
-                }}
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          {/* Title */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
+              Incident Title *
+            </label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g., Flooded underpass, Pothole, Fallen powerline"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300/80 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Category Pills */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
+              Category
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {CATEGORIES.map((cat) => {
+                const selected = category === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategory(cat.id)}
+                    className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
+                      selected
+                        ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-700'
+                    }`}
+                  >
+                    <span>{cat.icon}</span>
+                    <span className="truncate">{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Severity Buttons */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
+              Severity Level
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {SEVERITIES.map((sev) => {
+                const selected = severity === sev.id;
+                return (
+                  <button
+                    key={sev.id}
+                    type="button"
+                    onClick={() => setSeverity(sev.id)}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-semibold border text-center transition-all ${
+                      selected
+                        ? `${sev.color} ring-2 ring-blue-500/50`
+                        : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {sev.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Location & GPS */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                Location / Street Name *
+              </label>
+              <button
+                type="button"
+                onClick={handleUseGps}
+                disabled={locatingGps}
+                className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
               >
-                {errorMessage}
-              </div>
-            )}
-
-            <div className="form-field-group">
-              <label htmlFor="hz-title" className="field-label">
-                Hazard Title
-              </label>
-              <input
-                id="hz-title"
-                type="text"
-                className="form-input"
-                placeholder="e.g. Flooded underpass, Road construction"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-                minLength={3}
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              <div className="form-field-group">
-                <label htmlFor="hz-category" className="field-label">
-                  Category
-                </label>
-                <select
-                  id="hz-category"
-                  className="form-input"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  required
-                >
-                  <option value="">Select category...</option>
-                  <option value="Road Damage">Road Damage</option>
-                  <option value="Flooding">Flooding</option>
-                  <option value="Debris">Debris</option>
-                  <option value="Accident">Accident</option>
-                  <option value="Weather">Weather</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div className="form-field-group">
-                <label htmlFor="hz-severity" className="field-label">
-                  Severity
-                </label>
-                <select
-                  id="hz-severity"
-                  className="form-input"
-                  value={severity}
-                  onChange={(e) => setSeverity(e.target.value)}
-                >
-                  <option value="Low">Low (Caution)</option>
-                  <option value="Medium">Medium (Delay expected)</option>
-                  <option value="High">High (Severe / Impassable)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-field-group">
-              <label htmlFor="hz-location" className="field-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <MapPin size={14} /> Location Address / Landmarks
-              </label>
-              <div className="input-with-button">
-                <input
-                  id="hz-location"
-                  type="text"
-                  className="form-input"
-                  placeholder={loadingLocation ? 'Locating current coordinates...' : 'Enter location or address'}
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  required
-                />
-                {loadingLocation && (
-                  <span className="input-suffix-btn" style={{ pointerEvents: 'none' }}>
-                    <Loader2 size={16} className="spin" />
-                  </span>
+                {locatingGps ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <LocateFixed className="w-3.5 h-3.5" />
                 )}
-              </div>
-              {coordinates && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  GPS: {coordinates.lat.toFixed(5)}, {coordinates.lng.toFixed(5)}
-                </span>
-              )}
+                <span>Pin My GPS</span>
+              </button>
             </div>
-
-            <div className="form-field-group">
-              <label htmlFor="hz-description" className="field-label">
-                Additional Details (Optional)
-              </label>
-              <textarea
-                id="hz-description"
-                className="form-input"
-                rows={2}
-                placeholder="Give other drivers context, lane closures, or suggested detours..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-
-            <div className="form-field-group">
-              <label htmlFor="hz-image" className="field-label">
-                Hazard Photo (Optional)
-              </label>
+            <div className="relative">
+              <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
-                id="hz-image"
-                type="file"
-                className="form-input"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={(event) => setImageFile(event.target.files?.[0] || null)}
+                type="text"
+                required
+                value={locationName}
+                onChange={(e) => setLocationName(e.target.value)}
+                placeholder="e.g., Highway 101 near Exit 4, Main Street"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300/80 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                JPEG, PNG, WebP, or GIF · up to 5 MB
-              </span>
-              {imagePreviewUrl && (
-                <img
-                  className="hazard-upload-preview"
-                  src={imagePreviewUrl}
-                  alt="Selected hazard preview"
-                />
-              )}
             </div>
+            {coords && (
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                Coordinates: {Number(coords.lat).toFixed(5)}, {Number(coords.lng).toFixed(5)}
+              </p>
+            )}
+          </div>
 
-            {/* Scheduled window toggle */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                background: 'var(--bg-surface-alt)',
-                padding: '0.65rem 0.85rem',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                border: '1px solid var(--border-subtle)'
-              }}
-              onClick={() => setScheduled(!scheduled)}
-            >
+          {/* Optional Schedule Window Toggle */}
+          <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800/80">
+            <label className="flex items-center justify-between cursor-pointer py-1">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-slate-400" />
+                <span>Scheduled / Temporary Closure</span>
+              </span>
               <input
                 type="checkbox"
-                id="hz-scheduled"
-                checked={scheduled}
-                onChange={(e) => setScheduled(e.target.checked)}
-                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                onClick={(e) => e.stopPropagation()}
+                checked={isScheduled}
+                onChange={(e) => setIsScheduled(e.target.checked)}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
               />
-              <label
-                htmlFor="hz-scheduled"
-                style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-              >
-                <Calendar size={15} /> This hazard has an active time window
-              </label>
-            </div>
+            </label>
 
-            {scheduled && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div className="form-field-group">
-                  <label htmlFor="hz-start" className="field-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <Clock size={13} /> Start Time
+            {isScheduled && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Starts
                   </label>
                   <input
-                    id="hz-start"
                     type="datetime-local"
-                    className="form-input"
-                    value={start}
-                    onChange={(e) => setStart(e.target.value)}
-                    required={scheduled}
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
                   />
                 </div>
-                <div className="form-field-group">
-                  <label htmlFor="hz-end" className="field-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <Clock size={13} /> End Time
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Ends
                   </label>
                   <input
-                    id="hz-end"
                     type="datetime-local"
-                    className="form-input"
-                    value={end}
-                    onChange={(e) => setEnd(e.target.value)}
-                    required={scheduled}
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
                   />
                 </div>
               </div>
             )}
           </div>
 
-          <div className="modal-footer">
+          {/* Photo Upload */}
+          <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800/80">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
+              Incident Photo (Optional)
+            </label>
+
+            {imagePreview ? (
+              <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 max-h-44 group">
+                <img src={imagePreview} alt="Incident preview" className="w-full h-44 object-cover" />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-lg backdrop-blur-sm transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl cursor-pointer hover:border-blue-500/60 dark:hover:border-blue-500/60 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 transition-all">
+                <Upload className="w-6 h-6 text-slate-400 mb-1.5" />
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Click or drag photo to upload
+                </span>
+                <span className="text-[10px] text-slate-400 mt-0.5">JPEG, PNG, WebP up to 5 MB</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+              </label>
+            )}
+          </div>
+
+          {/* Submit Actions */}
+          <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-200/70 dark:border-slate-800">
             <button
               type="button"
-              className="btn btn-secondary"
               onClick={onClose}
               disabled={submitting}
+              className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="btn btn-primary"
               disabled={submitting}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-sm font-semibold shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50"
             >
               {submitting ? (
                 <>
-                  <Loader2 size={16} className="spin" /> Submitting...
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Reporting...</span>
                 </>
               ) : (
-                'Report Hazard'
+                <span>Publish Hazard</span>
               )}
             </button>
           </div>

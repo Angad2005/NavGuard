@@ -3,82 +3,256 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useHazards } from '../context/HazardContext';
 import {
-  geocodeAddress,
   formatDuration,
   formatDistance,
-  routeTouchesHazard,
-  routeSignature,
   getHazardColor,
-  getDeviceLocation
+  reverseGeocodePoint,
+  distanceBetweenPointsMeters
 } from '../utils/geo';
-import { HazardModal } from './HazardModal';
+import { WeatherCanvasOverlay } from './WeatherCanvasOverlay';
+import { playSound } from '../utils/audio';
 import {
   Navigation,
-  Crosshair,
   MapPin,
-  Trash2,
-  AlertTriangle,
-  CheckCircle,
+  LocateFixed,
   Route as RouteIcon,
-  Plus,
-  Loader2,
-  ChevronRight,
   ShieldCheck,
-  Compass
+  ShieldAlert,
+  Loader2,
+  X,
+  Compass,
+  ZoomIn,
+  ZoomOut,
+  AlertTriangle,
+  Layers,
+  Play,
+  Pause,
+  Sparkles,
+  Eye,
+  EyeOff,
+  Car,
+  Volume2,
+  VolumeX,
+  Clock,
+  Bot
 } from 'lucide-react';
 
-// Fix Leaflet default icon issues in bundled environments
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
-});
+const MAP_LAYERS = {
+  streets: {
+    name: 'Streets',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19
+  },
+  dark: {
+    name: 'Dark Cyber',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; CARTO, &copy; OpenStreetMap contributors',
+    maxZoom: 20
+  },
+  light: {
+    name: 'Clean Light',
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; CARTO, &copy; OpenStreetMap contributors',
+    maxZoom: 20
+  },
+  satellite: {
+    name: 'Satellite',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri & GIS Community',
+    maxZoom: 18
+  }
+};
 
-export function MapView({ onToast }) {
-  const { hazards, activeHazardsList, deleteHazard, fetchHazards } = useHazards();
+function createLocationMarker(label, color) {
+  return L.divIcon({
+    className: 'custom-location-marker-wrapper',
+    html: `
+      <div style="position: relative; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">
+        <div class="radar-ring" style="background-color: ${color}33;"></div>
+        <div style="
+          position: relative;
+          z-index: 2;
+          background: ${color};
+          color: white;
+          width: 32px;
+          height: 32px;
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+          border: 2px solid white;
+        ">
+          <span style="transform: rotate(45deg); font-weight: 800; font-size: 13px;">${label}</span>
+        </div>
+      </div>
+    `,
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -36]
+  });
+}
+
+function createHazardMarker(category, severity) {
+  const color = getHazardColor(category, severity);
+  let emoji = '⚠️';
+  if (category === 'Flooding') emoji = '🌊';
+  else if (category === 'Road Damage') emoji = '🚧';
+  else if (category === 'Debris') emoji = '🪵';
+  else if (category === 'Accident') emoji = '💥';
+  else if (category === 'Construction') emoji = '🏗️';
+
+  return L.divIcon({
+    className: 'custom-hazard-marker-wrapper',
+    html: `
+      <div style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;">
+        <div class="radar-ring" style="background-color: ${color};"></div>
+        <div style="
+          position: relative;
+          z-index: 2;
+          background: ${color};
+          color: white;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 16px ${color}88;
+          border: 2px solid white;
+          font-size: 15px;
+        ">
+          ${emoji}
+        </div>
+      </div>
+    `,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -17]
+  });
+}
+
+function createVehicleMarker() {
+  return L.divIcon({
+    className: 'custom-vehicle-marker-wrapper',
+    html: `
+      <div style="position: relative; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">
+        <div class="radar-ring vehicle-ping-ring" style="background-color: #3b82f6;"></div>
+        <div style="
+          position: relative;
+          z-index: 3;
+          background: #2563eb;
+          color: white;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 14px rgba(37,99,235,0.6);
+          border: 2.5px solid white;
+        ">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
+          </svg>
+        </div>
+      </div>
+    `,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+}
+
+export function MapView({
+  startCoords,
+  setStartCoords,
+  setStartQuery,
+  endCoords,
+  setEndCoords,
+  setEndQuery,
+  routeResults,
+  selectedRouteIndex,
+  setSelectedRouteIndex,
+  navigationMode,
+  setNavigationMode,
+  onOpenReportWithCoords,
+  weatherCode,
+  manualWeatherMode,
+  rainSoundEnabled,
+  windshieldGlass,
+  onToast,
+  onOpenNavAI,
+  previewAlternateRoute
+}) {
+  const { activeHazardsList } = useHazards();
 
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  const activeTileLayerRef = useRef(null);
   const routeLayersRef = useRef([]);
   const hazardLayersRef = useRef([]);
   const startMarkerRef = useRef(null);
   const endMarkerRef = useRef(null);
+  const vehicleMarkerRef = useRef(null);
 
-  const [startQuery, setStartQuery] = useState('');
-  const [endQuery, setEndQuery] = useState('');
-  const [startCoords, setStartCoords] = useState(null);
-  const [endCoords, setEndCoords] = useState(null);
+  const selectedLayerKey = 'streets';
+  const [showAvoidanceZones, setShowAvoidanceZones] = useState(true);
 
-  const [locatingGps, setLocatingGps] = useState(false);
-  const [routing, setRouting] = useState(false);
-  const [routeCandidates, setRouteCandidates] = useState([]);
-  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
-  const [routingError, setRoutingError] = useState('');
+  // Simulation & Audio Guidance
+  const [simulationRunning, setSimulationRunning] = useState(false);
+  const [simulationIndex, setSimulationIndex] = useState(0);
+  const [simulatedSpeed, setSimulatedSpeed] = useState(48);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
 
-  // Hazard Modal State
-  const [hazardModalOpen, setHazardModalOpen] = useState(false);
-  const [hazardModalPoint, setHazardModalPoint] = useState(null);
+  // Live Precision Clock & Compass Heading
+  const [currentTime, setCurrentTime] = useState('');
+  const [compassAngle, setCompassAngle] = useState(352);
 
-  // Initialize Map
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString([], { hour12: false }));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Voice Guidance (Text-To-Speech)
+  const speakGuidance = useCallback((text) => {
+    if (!voiceEnabled || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech error:', err);
+    }
+  }, [voiceEnabled]);
+
+  // Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      zoomControl: false
+      zoomControl: false,
+      worldCopyJump: true
     }).setView([28.6139, 77.209], 12);
 
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    const initialDef = MAP_LAYERS[selectedLayerKey] || MAP_LAYERS.streets;
+    const tileLayer = L.tileLayer(initialDef.url, {
+      attribution: initialDef.attribution,
+      maxZoom: initialDef.maxZoom
     }).addTo(map);
 
-    map.on('click', (e) => {
-      setHazardModalPoint(e.latlng);
-      setHazardModalOpen(true);
+    activeTileLayerRef.current = tileLayer;
+
+    map.on('move', () => {
+      setCompassAngle((prev) => (prev + 0.3) % 360);
     });
 
     mapInstanceRef.current = map;
@@ -89,629 +263,531 @@ export function MapView({ onToast }) {
     };
   }, []);
 
-  // Update Hazard Markers on Map
+
+  // Handle Map Clicks to Set Origin, Destination, or Report
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Clear previous hazard layers
-    hazardLayersRef.current.forEach((layer) => map.removeLayer(layer));
+    const handleMapClick = async (e) => {
+      if (navigationMode) return;
+      const point = { lat: e.latlng.lat, lng: e.latlng.lng };
+
+      if (!startCoords) {
+        setStartCoords(point);
+        const name = await reverseGeocodePoint(point);
+        setStartQuery(name ? name.split(',').slice(0, 2).join(',') : `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`);
+        playSound('click');
+        if (onToast) onToast('Origin pinned on map.', 'info');
+      } else if (!endCoords) {
+        setEndCoords(point);
+        const name = await reverseGeocodePoint(point);
+        setEndQuery(name ? name.split(',').slice(0, 2).join(',') : `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`);
+        playSound('click');
+        if (onToast) onToast('Destination pinned on map.', 'info');
+      } else {
+        L.popup()
+          .setLatLng(e.latlng)
+          .setContent(`
+            <div style="font-size: 12px; padding: 6px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-weight: 700; color: #1e293b; font-size: 13px;">Map Coordinates</span>
+              <button id="pop-set-start" style="padding: 6px 12px; border-radius: 8px; background: #10b981; color: white; border: none; cursor: pointer; font-weight: 600; font-size: 12px;">Set as Start (A)</button>
+              <button id="pop-set-end" style="padding: 6px 12px; border-radius: 8px; background: #6366f1; color: white; border: none; cursor: pointer; font-weight: 600; font-size: 12px;">Set as Destination (B)</button>
+              <button id="pop-rep-haz" style="padding: 6px 12px; border-radius: 8px; background: #ef4444; color: white; border: none; cursor: pointer; font-weight: 600; font-size: 12px;">Report Hazard Here ⚠️</button>
+            </div>
+          `)
+          .openOn(map);
+
+        setTimeout(() => {
+          document.getElementById('pop-set-start')?.addEventListener('click', async () => {
+            map.closePopup();
+            setStartCoords(point);
+            const name = await reverseGeocodePoint(point);
+            setStartQuery(name ? name.split(',').slice(0, 2).join(',') : `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`);
+            playSound('click');
+          });
+          document.getElementById('pop-set-end')?.addEventListener('click', async () => {
+            map.closePopup();
+            setEndCoords(point);
+            const name = await reverseGeocodePoint(point);
+            setEndQuery(name ? name.split(',').slice(0, 2).join(',') : `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`);
+            playSound('click');
+          });
+          document.getElementById('pop-rep-haz')?.addEventListener('click', () => {
+            map.closePopup();
+            onOpenReportWithCoords(point);
+            playSound('click');
+          });
+        }, 50);
+      }
+    };
+
+    map.on('click', handleMapClick);
+    return () => map.off('click', handleMapClick);
+  }, [startCoords, endCoords, navigationMode, onOpenReportWithCoords, onToast]);
+
+  // Update Start & Destination Markers
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    if (startCoords) {
+      if (startMarkerRef.current) startMarkerRef.current.remove();
+      startMarkerRef.current = L.marker([startCoords.lat, startCoords.lng], {
+        icon: createLocationMarker('A', '#10b981'),
+        draggable: true
+      })
+        .addTo(map)
+        .bindPopup('<b>Starting Point (A)</b>');
+
+      startMarkerRef.current.on('dragend', async (e) => {
+        const pt = e.target.getLatLng();
+        setStartCoords({ lat: pt.lat, lng: pt.lng });
+        const name = await reverseGeocodePoint(pt);
+        if (name) setStartQuery(name.split(',').slice(0, 2).join(','));
+      });
+    } else if (startMarkerRef.current) {
+      startMarkerRef.current.remove();
+      startMarkerRef.current = null;
+    }
+
+    if (endCoords) {
+      if (endMarkerRef.current) endMarkerRef.current.remove();
+      endMarkerRef.current = L.marker([endCoords.lat, endCoords.lng], {
+        icon: createLocationMarker('B', '#6366f1'),
+        draggable: true
+      })
+        .addTo(map)
+        .bindPopup('<b>Destination (B)</b>');
+
+      endMarkerRef.current.on('dragend', async (e) => {
+        const pt = e.target.getLatLng();
+        setEndCoords({ lat: pt.lat, lng: pt.lng });
+        const name = await reverseGeocodePoint(pt);
+        if (name) setEndQuery(name.split(',').slice(0, 2).join(','));
+      });
+    } else if (endMarkerRef.current) {
+      endMarkerRef.current.remove();
+      endMarkerRef.current = null;
+    }
+  }, [startCoords, endCoords]);
+
+  // Render Hazards and Danger Zones
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    hazardLayersRef.current.forEach((layer) => layer.remove());
     hazardLayersRef.current = [];
 
-    hazards.forEach((hazard) => {
-      if (!hazard.coordinates) return;
-      const point = L.latLng(hazard.coordinates.lat, hazard.coordinates.lng);
-      const color = getHazardColor(hazard.category, hazard.severity);
+    activeHazardsList.forEach((h) => {
+      if (!h.coordinates || !Number.isFinite(h.coordinates.lat) || !Number.isFinite(h.coordinates.lng)) return;
 
-      const marker = L.circleMarker(point, {
-        radius: 8,
-        color: color,
-        fillColor: color,
-        fillOpacity: 0.88,
-        weight: 2,
-        bubblingMouseEvents: false
+      const marker = L.marker([h.coordinates.lat, h.coordinates.lng], {
+        icon: createHazardMarker(h.category, h.severity)
       }).addTo(map);
 
-      const popupDiv = document.createElement('div');
-      popupDiv.style.fontFamily = 'var(--font-family)';
-      popupDiv.style.fontSize = '13px';
-      popupDiv.style.minWidth = '180px';
-      const title = document.createElement('div');
-      title.textContent = hazard.title;
-      title.style.cssText = 'font-weight:700;font-size:14px;color:#0f172a;margin-bottom:4px;';
-      popupDiv.appendChild(title);
-
-      if (hazard.imageUrl) {
-        const image = document.createElement('img');
-        image.src = hazard.imageUrl;
-        image.alt = `${hazard.title} hazard`;
-        image.className = 'map-hazard-image';
-        popupDiv.appendChild(image);
+      let circle = null;
+      if (showAvoidanceZones) {
+        circle = L.circle([h.coordinates.lat, h.coordinates.lng], {
+          radius: 100,
+          color: getHazardColor(h.category, h.severity),
+          fillColor: getHazardColor(h.category, h.severity),
+          fillOpacity: 0.16,
+          weight: 1.5,
+          dashArray: '5, 5'
+        }).addTo(map);
       }
 
-      const category = document.createElement('div');
-      category.textContent = `Category: ${hazard.category}`;
-      category.style.cssText = 'color:#64748b;margin-bottom:2px;';
-      popupDiv.appendChild(category);
+      marker.bindPopup(`
+        <div style="font-size: 12px; min-width: 200px; padding: 2px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+            <span style="font-weight: 800; font-size: 13px; color: #0f172a;">${h.title}</span>
+            <span style="background: ${getHazardColor(h.category, h.severity)}22; color: ${getHazardColor(h.category, h.severity)}; padding: 2px 6px; border-radius: 6px; font-weight: 700; font-size: 10px;">${h.severity}</span>
+          </div>
+          <div style="color: #64748b; font-size: 11px; margin-bottom: 6px;">${h.category} • ${h.location}</div>
+          ${h.imageUrl ? `<img src="${h.imageUrl}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 10px; margin-bottom: 6px;" />` : ''}
+          ${h.description ? `<p style="color: #475569; font-size: 11px; line-height: 1.4; margin-bottom: 6px;">${h.description}</p>` : ''}
+          <div style="font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 4px;">Obstacle (${h.confirmations || 1} verified)</div>
+        </div>
+      `);
 
-      const severity = document.createElement('div');
-      severity.style.cssText = 'color:#64748b;margin-bottom:6px;';
-      const severityLabel = document.createElement('b');
-      severityLabel.textContent = 'Severity: ';
-      const severityValue = document.createElement('span');
-      severityValue.textContent = hazard.severity;
-      severityValue.style.cssText = `font-weight:600;color:${color}`;
-      severity.append(severityLabel, severityValue);
-      popupDiv.appendChild(severity);
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.innerText = 'Delete Hazard';
-      deleteBtn.style.cssText =
-        'background:#ef4444;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;display:inline-block;';
-      deleteBtn.onclick = async () => {
-        if (window.confirm(`Delete hazard "${hazard.title}"?`)) {
-          try {
-            await deleteHazard(hazard.id);
-            if (onToast) onToast('Hazard removed', 'info');
-          } catch (err) {
-            if (onToast) onToast(err.message, 'error');
-          }
-        }
-      };
-
-      popupDiv.appendChild(deleteBtn);
-      marker.bindPopup(popupDiv);
-      let closePopupTimer;
-      const schedulePopupClose = () => {
-        window.clearTimeout(closePopupTimer);
-        closePopupTimer = window.setTimeout(() => marker.closePopup(), 1500);
-      };
-      marker.on('mouseover', () => {
-        window.clearTimeout(closePopupTimer);
-        marker.openPopup();
-      });
-      marker.on('mouseout', schedulePopupClose);
-      marker.on('popupopen', (event) => {
-        const popupElement = event.popup.getElement();
-        if (!popupElement) return;
-        popupElement.onmouseenter = () => window.clearTimeout(closePopupTimer);
-        popupElement.onmouseleave = schedulePopupClose;
-      });
-      marker.on('remove', () => window.clearTimeout(closePopupTimer));
       hazardLayersRef.current.push(marker);
+      if (circle) hazardLayersRef.current.push(circle);
     });
-  }, [hazards, deleteHazard, onToast]);
+  }, [activeHazardsList, showAvoidanceZones]);
 
-  // Request Routes
-  const calculateRoutes = useCallback(
-    async (start, end, additionalHazards = []) => {
-      if (!start || !end) return;
-      setRouting(true);
-      setRoutingError('');
-
-      // Clear existing route layers
-      const map = mapInstanceRef.current;
-      if (map) {
-        routeLayersRef.current.forEach((layer) => map.removeLayer(layer));
-        routeLayersRef.current = [];
-      }
-
-      try {
-        const activeHazards = [
-          ...new Map(
-            [...activeHazardsList, ...additionalHazards]
-              .filter((h) => h?.coordinates)
-              .map((h) => [
-                h.id || `${h.coordinates.lat},${h.coordinates.lng}`,
-                h
-              ])
-          ).values()
-        ];
-
-        const response = await fetch('/api/route', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            start: { lat: start.lat, lng: start.lng },
-            end: { lat: end.lat, lng: end.lng },
-            hazards: activeHazards
-          })
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || 'Routing service unavailable.');
-        }
-
-        const routes = payload.data || [];
-        if (!routes.length) {
-          throw new Error('No route found avoiding active hazards.');
-        }
-
-        const evaluated = routes.map((r) => ({
-          ...r,
-          hazardCount: activeHazards.filter((h) => routeTouchesHazard(r, h)).length
-        }));
-
-        const unique = [
-          ...new Map(evaluated.map((r) => [routeSignature(r), r])).values()
-        ];
-
-        const sorted = unique
-          .sort(
-            (a, b) =>
-              a.hazardCount - b.hazardCount || a.duration - b.duration
-          )
-          .slice(0, 3);
-
-        setRouteCandidates(sorted);
-        setSelectedRouteIndex(0);
-
-        if (map) {
-          routeLayersRef.current = sorted.map((route, idx) => {
-            const isSelected = idx === 0;
-            const layer = L.geoJSON(route.geometry, {
-              style: {
-                color: isSelected ? '#2563eb' : '#93c5fd',
-                opacity: isSelected ? 0.95 : 0.45,
-                weight: isSelected ? 7 : 5,
-                lineCap: 'round',
-                lineJoin: 'round'
-              },
-              interactive: true
-            }).addTo(map);
-
-            layer.on('click', () => {
-              setSelectedRouteIndex(idx);
-            });
-
-            return layer;
-          });
-
-          if (sorted[0]?.geometry?.coordinates?.length) {
-            const bounds = L.latLngBounds(
-              sorted[0].geometry.coordinates.map((p) => [p[1], p[0]])
-            );
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-          }
-        }
-      } catch (err) {
-        setRoutingError(err.message || 'Could not calculate a route.');
-      } finally {
-        setRouting(false);
-      }
-    },
-    [activeHazardsList]
-  );
-
-  // Update polyline styling when selected route changes
+  // Render Routes with Sexy Neon Drop Shadows
   useEffect(() => {
-    routeLayersRef.current.forEach((layer, idx) => {
-      const isSelected = idx === selectedRouteIndex;
-      layer.setStyle({
-        color: isSelected ? '#2563eb' : '#93c5fd',
-        opacity: isSelected ? 0.95 : 0.45,
-        weight: isSelected ? 7 : 5
-      });
-      if (isSelected) layer.bringToFront();
-    });
-  }, [selectedRouteIndex]);
-
-  // Navigate Handler
-  const handleNavigate = async () => {
-    if (!endQuery.trim()) {
-      alert('Please enter a destination.');
-      return;
-    }
-
-    let start = startCoords;
-    if (!start && startQuery.trim()) {
-      const resolved = await geocodeAddress(startQuery);
-      if (!resolved) {
-        alert('Could not resolve starting location.');
-        return;
-      }
-      start = { lat: resolved.lat, lng: resolved.lng };
-      setStartCoords(start);
-      if (mapInstanceRef.current) {
-        if (startMarkerRef.current) mapInstanceRef.current.removeLayer(startMarkerRef.current);
-        startMarkerRef.current = L.marker(start)
-          .addTo(mapInstanceRef.current)
-          .bindPopup(`Start: ${resolved.name}`);
-      }
-    }
-
-    if (!start) {
-      alert('Please enter a starting point or use GPS locate.');
-      return;
-    }
-
-    let end = endCoords;
-    if (!end || !endQuery.trim()) {
-      const resolved = await geocodeAddress(endQuery);
-      if (!resolved) {
-        alert('Could not resolve destination location.');
-        return;
-      }
-      end = { lat: resolved.lat, lng: resolved.lng };
-      setEndCoords(end);
-      if (mapInstanceRef.current) {
-        if (endMarkerRef.current) mapInstanceRef.current.removeLayer(endMarkerRef.current);
-        endMarkerRef.current = L.marker(end)
-          .addTo(mapInstanceRef.current)
-          .bindPopup(`Destination: ${resolved.name}`)
-          .openPopup();
-      }
-    }
-
-    await calculateRoutes(start, end);
-  };
-
-  // GPS Locate for Start Point
-  const handleGpsLocate = async () => {
-    setLocatingGps(true);
-    try {
-      const loc = await getDeviceLocation();
-      setStartCoords(loc);
-      setStartQuery('Current Location');
-      const map = mapInstanceRef.current;
-      if (map) {
-        map.flyTo(loc, 15);
-        if (startMarkerRef.current) map.removeLayer(startMarkerRef.current);
-        startMarkerRef.current = L.marker(loc)
-          .addTo(map)
-          .bindPopup('Your Current Location')
-          .openPopup();
-      }
-      if (onToast) onToast('Location detected via device GPS', 'info');
-    } catch (err) {
-      alert(err.message || 'Could not access device location.');
-    } finally {
-      setLocatingGps(false);
-    }
-  };
-
-  // Clear All
-  const handleClear = () => {
-    setStartQuery('');
-    setEndQuery('');
-    setStartCoords(null);
-    setEndCoords(null);
-    setRouteCandidates([]);
-    setSelectedRouteIndex(0);
-    setRoutingError('');
-
     const map = mapInstanceRef.current;
-    if (map) {
-      if (startMarkerRef.current) map.removeLayer(startMarkerRef.current);
-      if (endMarkerRef.current) map.removeLayer(endMarkerRef.current);
-      routeLayersRef.current.forEach((l) => map.removeLayer(l));
-      routeLayersRef.current = [];
-      map.flyTo([28.6139, 77.209], 12);
-    }
-  };
+    if (!map) return;
 
-  // Route candidate label
-  const getRouteLabel = (route, idx) => {
-    if (!routeCandidates.length) return '';
-    const fastest = routeCandidates.reduce(
-      (b, r) => (r.duration < b.duration ? r : b),
-      routeCandidates[0]
-    );
-    const shortest = routeCandidates.reduce(
-      (b, r) => (r.distance < b.distance ? r : b),
-      routeCandidates[0]
-    );
-    if (route === fastest && route === shortest) return 'Fastest & Shortest';
-    if (route === fastest) return 'Fastest Route';
-    if (route === shortest) return 'Shortest Route';
-    if (idx === 0) return 'Recommended Detour';
-    return `Alternative ${idx + 1}`;
-  };
+    routeLayersRef.current.forEach((layer) => layer.remove());
+    routeLayersRef.current = [];
 
-  const selectedRoute = routeCandidates[selectedRouteIndex];
+    if (!routeResults || routeResults.length === 0) return;
 
-  return (
-    <div className="map-screen-layout">
-      {/* Sidebar Controls */}
-      <aside className="map-sidebar">
-        <div className="map-sidebar-content">
-          {/* Search Inputs Card */}
-          <div className="input-card">
-            <div className="form-field-group">
-              <label htmlFor="start-point" className="field-label">
-                Starting Point
-              </label>
-              <div className="input-with-button">
-                <input
-                  id="start-point"
-                  type="text"
-                  className="form-input"
-                  placeholder="Choose starting point or address..."
-                  value={startQuery}
-                  onChange={(e) => {
-                    setStartQuery(e.target.value);
-                    setStartCoords(null);
-                    if (startMarkerRef.current && mapInstanceRef.current) {
-                      mapInstanceRef.current.removeLayer(startMarkerRef.current);
-                      startMarkerRef.current = null;
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="input-suffix-btn"
-                  onClick={handleGpsLocate}
-                  title="Use my current GPS location"
-                  aria-label="Use GPS location"
-                  disabled={locatingGps}
-                >
-                  {locatingGps ? (
-                    <Loader2 size={16} className="spin" />
-                  ) : (
-                    <Crosshair size={16} />
-                  )}
+    routeResults.forEach((route, idx) => {
+      const isSelected = idx === selectedRouteIndex;
+      const isDetour = route.hazardDetour === true;
+      const coords = (route.geometry?.coordinates || []).map(([lng, lat]) => [lat, lng]);
+      if (coords.length === 0) return;
+
+      const mainColor = isSelected ? (isDetour ? '#10b981' : '#3b82f6') : '#64748b';
+      const glowColor = isSelected ? (isDetour ? '#10b981' : '#3b82f6') : '#94a3b8';
+      const glowFilterClass = isSelected ? (isDetour ? 'leaflet-route-detour-glow' : 'leaflet-route-glow') : '';
+
+      // Glowing Halo backdrop line
+      const glowLine = L.polyline(coords, {
+        color: glowColor,
+        weight: isSelected ? 14 : 7,
+        opacity: isSelected ? 0.45 : 0.15,
+        lineCap: 'round',
+        lineJoin: 'round',
+        className: glowFilterClass
+      }).addTo(map);
+
+      // Core Polyline
+      const coreLine = L.polyline(coords, {
+        color: mainColor,
+        weight: isSelected ? 6 : 4,
+        opacity: isSelected ? 0.98 : 0.65,
+        lineCap: 'round',
+        lineJoin: 'round',
+        className: glowFilterClass
+      }).addTo(map);
+
+      const handlePolylineClick = (e) => {
+        setSelectedRouteIndex(idx);
+        playSound('click');
+        if (e.latlng && !navigationMode) {
+          L.popup()
+            .setLatLng(e.latlng)
+            .setContent(`
+              <div style="font-family: system-ui, sans-serif; padding: 4px; text-align: center;">
+                <div style="font-size: 11px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">
+                  Active Route Corridor
+                </div>
+                <button id="pop-rep-haz-line-${idx}" style="padding: 7px 12px; border-radius: 8px; background: #ef4444; color: white; border: none; cursor: pointer; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                  Report Obstacle On Route ⚠️
                 </button>
               </div>
-            </div>
+            `)
+            .openOn(map);
 
-            <div className="form-field-group">
-              <label htmlFor="end-point" className="field-label">
-                Destination
-              </label>
-              <div className="input-with-button">
-                <input
-                  id="end-point"
-                  type="text"
-                  className="form-input"
-                  placeholder="Enter destination location..."
-                  value={endQuery}
-                  onChange={(e) => {
-                    setEndQuery(e.target.value);
-                    setEndCoords(null);
-                    if (endMarkerRef.current && mapInstanceRef.current) {
-                      mapInstanceRef.current.removeLayer(endMarkerRef.current);
-                      endMarkerRef.current = null;
-                    }
-                  }}
-                />
+          setTimeout(() => {
+            document.getElementById(`pop-rep-haz-line-${idx}`)?.addEventListener('click', () => {
+              map.closePopup();
+              onOpenReportWithCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
+              playSound('click');
+            });
+          }, 50);
+        }
+      };
+      coreLine.on('click', handlePolylineClick);
+      glowLine.on('click', handlePolylineClick);
+      routeLayersRef.current.push(glowLine, coreLine);
+
+      // Animated Dash Flow for Active Route
+      if (isSelected) {
+        const flowLine = L.polyline(coords, {
+          color: '#ffffff',
+          weight: 2.5,
+          opacity: 0.9,
+          dashArray: '10, 18',
+          className: 'route-animated-flow'
+        }).addTo(map);
+        routeLayersRef.current.push(flowLine);
+      }
+    });
+
+    // Render Proposed Alternate Detour Preview if active
+    if (previewAlternateRoute?.geometry?.coordinates?.length) {
+      const altCoords = previewAlternateRoute.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+      const altGlow = L.polyline(altCoords, {
+        color: '#06b6d4',
+        weight: 12,
+        opacity: 0.45,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+
+      const altCore = L.polyline(altCoords, {
+        color: '#10b981',
+        weight: 5,
+        opacity: 0.95,
+        dashArray: '8, 12',
+        className: 'route-animated-flow'
+      }).addTo(map);
+
+      routeLayersRef.current.push(altGlow, altCore);
+    }
+
+    const selected = routeResults[selectedRouteIndex];
+    if (selected?.geometry?.coordinates?.length && !navigationMode) {
+      const latLngs = selected.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+      map.fitBounds(L.latLngBounds(latLngs), { padding: [80, 80] });
+    }
+  }, [routeResults, selectedRouteIndex, navigationMode, previewAlternateRoute]);
+
+  // Turn-by-Turn Drive Simulation along Route
+  useEffect(() => {
+    let timer = null;
+    const selected = routeResults[selectedRouteIndex];
+    const coords = (selected?.geometry?.coordinates || []).map(([lng, lat]) => [lat, lng]);
+
+    if (simulationRunning && coords.length > 0) {
+      timer = setInterval(() => {
+        setSimulationIndex((prev) => {
+          const next = prev + 1;
+          if (next >= coords.length) {
+            setSimulationRunning(false);
+            speakGuidance('You have safely arrived at your destination.');
+            playSound('success');
+            if (onToast) onToast('You have arrived at your destination!', 'success');
+            return 0;
+          }
+
+          const currentPoint = coords[next];
+          if (vehicleMarkerRef.current) {
+            vehicleMarkerRef.current.setLatLng(currentPoint);
+          } else if (mapInstanceRef.current) {
+            vehicleMarkerRef.current = L.marker(currentPoint, {
+              icon: createVehicleMarker(),
+              zIndexOffset: 1000
+            }).addTo(mapInstanceRef.current);
+          }
+
+          setSimulatedSpeed(Math.floor(46 + Math.random() * 8));
+
+          // Proximity hazard warning check
+          activeHazardsList.forEach((hz) => {
+            if (hz.coordinates) {
+              const d = distanceBetweenPointsMeters(
+                { lat: currentPoint[0], lng: currentPoint[1] },
+                { lat: hz.coordinates.lat, lng: hz.coordinates.lng }
+              );
+              if (d <= 250 && d > 200 && next % 6 === 0) {
+                speakGuidance(`Attention: Bypassing ${hz.category} hazard safely on your detour corridor.`);
+                playSound('warning');
+              }
+            }
+          });
+
+          mapInstanceRef.current?.panTo(currentPoint, { animate: true, duration: 0.4 });
+          return next;
+        });
+      }, 500);
+    }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [simulationRunning, routeResults, selectedRouteIndex, activeHazardsList, speakGuidance, onToast]);
+
+  const handleStopNavigation = () => {
+    setNavigationMode(false);
+    setSimulationRunning(false);
+    setSimulationIndex(0);
+    if (vehicleMarkerRef.current) {
+      vehicleMarkerRef.current.remove();
+      vehicleMarkerRef.current = null;
+    }
+  };
+
+  const focusOnPoint = useCallback((point) => {
+    const map = mapInstanceRef.current;
+    if (!map || !point) return;
+    map.flyTo([point.lat, point.lng], 16, { duration: 1.2 });
+  }, []);
+
+  useEffect(() => {
+    window.__naviguard_focus = focusOnPoint;
+    return () => {
+      delete window.__naviguard_focus;
+    };
+  }, [focusOnPoint]);
+
+  const activeRoute = routeResults[selectedRouteIndex];
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-slate-950">
+      {/* Fullscreen Map Canvas */}
+      <div ref={mapContainerRef} className="w-full h-full z-0" />
+
+      {/* Atmospheric Weather Canvas (Rain, Lightning Storm, Snow, Fog) */}
+      <WeatherCanvasOverlay
+        weatherCode={weatherCode}
+        manualWeatherMode={manualWeatherMode}
+        soundEnabled={rainSoundEnabled}
+      />
+
+      {/* Windshield Glass Droplets Effect */}
+      {windshieldGlass && <div className="windshield-glass-overlay" />}
+
+      {/* Map Atmospheric Cyber Vignette */}
+      <div className="map-atmospheric-vignette" />
+
+      {/* TOP HUD: Turn-by-Turn Navigation Mode Bar */}
+      {navigationMode && activeRoute && (
+        <div className="absolute top-18 left-1/2 -translate-x-1/2 z-30 w-full max-w-2xl px-4 animate-in slide-in-from-top duration-300">
+          <div className="rounded-3xl cyber-glass text-white p-4 flex items-center justify-between gap-4 shadow-2xl">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30 shrink-0">
+                <Navigation className="w-6 h-6 animate-pulse" />
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs uppercase font-black tracking-wider text-emerald-400 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Safe Corridor Active</span>
+                  </span>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-xs text-slate-300">
+                    Step {simulationIndex + 1} of {activeRoute.geometry?.coordinates?.length || 1}
+                  </span>
+                </div>
+                <h3 className="font-extrabold text-base leading-snug">
+                  {formatDuration(activeRoute.duration)} • {formatDistance(activeRoute.distance)}
+                </h3>
               </div>
             </div>
 
-            <div className="action-row">
+            {/* Live Speedometer & Controls */}
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-black/40 border border-white/10">
+                <div className="text-right">
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block">Speed</span>
+                  <span className="font-mono font-black text-sm text-emerald-400">{simulatedSpeed} <span className="text-[10px] text-slate-400">km/h</span></span>
+                </div>
+                <div className="w-6 h-6 rounded-full border-2 border-rose-500 flex items-center justify-center font-bold text-[9px] text-slate-200">
+                  50
+                </div>
+              </div>
+
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={handleClear}
-                style={{ flex: 1 }}
+                onClick={() => {
+                  setVoiceEnabled(!voiceEnabled);
+                  playSound('click');
+                  if (onToast) onToast(voiceEnabled ? 'Voice guidance muted.' : 'Voice guidance enabled.', 'info');
+                }}
+                className={`p-2.5 rounded-2xl border transition-all ${
+                  voiceEnabled
+                    ? 'border-blue-500/50 bg-blue-500/20 text-blue-400'
+                    : 'border-white/10 bg-white/5 text-slate-400'
+                }`}
+                title={voiceEnabled ? 'Mute voice guidance' : 'Enable voice guidance'}
               >
-                Clear
+                {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               </button>
+
               <button
                 type="button"
-                className="btn btn-primary"
-                onClick={handleNavigate}
-                disabled={routing}
-                style={{ flex: 2 }}
+                onClick={() => {
+                  setSimulationRunning(!simulationRunning);
+                  playSound('click');
+                }}
+                className={`p-2.5 px-3.5 rounded-2xl font-black text-xs flex items-center gap-1.5 transition-all ${
+                  simulationRunning
+                    ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-md shadow-emerald-500/25'
+                }`}
               >
-                {routing ? (
+                {simulationRunning ? (
                   <>
-                    <Loader2 size={16} className="spin" /> Calculating...
+                    <Pause className="w-4 h-4" />
+                    <span>Pause</span>
                   </>
                 ) : (
                   <>
-                    <Navigation size={16} /> Navigate
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>Sim Drive</span>
                   </>
                 )}
               </button>
+
+              <button
+                type="button"
+                onClick={handleStopNavigation}
+                className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+                title="Exit navigation"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
-
-          {/* Results / Directions Panel */}
-          {routingError ? (
-            <div
-              style={{
-                background: 'var(--danger-light)',
-                border: '1px solid var(--danger-border)',
-                color: 'var(--danger)',
-                padding: '1rem',
-                borderRadius: 'var(--radius-lg)',
-                fontSize: '0.88rem'
-              }}
-            >
-              <b>Could not calculate route:</b>
-              <p style={{ marginTop: '0.25rem' }}>{routingError}</p>
-            </div>
-          ) : selectedRoute ? (
-            <div className="route-summary-card">
-              <div className="route-summary-top">
-                <div>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      color: 'var(--text-muted)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em'
-                    }}
-                  >
-                    RECOMMENDED ROUTE
-                  </span>
-                  <div className="route-time">
-                    {formatDuration(selectedRoute.duration)}
-                  </div>
-                  <div className="route-submeta">
-                    {formatDistance(selectedRoute.distance)} ·{' '}
-                    {selectedRoute.hazardCount === 0 ? (
-                      <span style={{ color: 'var(--success)', fontWeight: 600 }}>
-                        Avoids all active hazards
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--danger)', fontWeight: 600 }}>
-                        Passes {selectedRoute.hazardCount} active hazard
-                        {selectedRoute.hazardCount === 1 ? '' : 's'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <span
-                  className={`route-badge ${
-                    selectedRoute.hazardCount === 0
-                      ? 'route-badge-safe'
-                      : 'route-badge-caution'
-                  }`}
-                >
-                  {selectedRoute.hazardCount === 0 ? '✓ Safe' : '⚠ Caution'}
-                </span>
-              </div>
-
-              {/* Compare Alternatives */}
-              {routeCandidates.length > 1 && (
-                <div style={{ marginTop: '0.75rem' }}>
-                  <span
-                    style={{
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      color: 'var(--text-secondary)'
-                    }}
-                  >
-                    Compare Route Options:
-                  </span>
-                  <div className="route-options-list">
-                    {routeCandidates.map((route, idx) => (
-                      <div
-                        key={idx}
-                        className={`route-option-item ${
-                          idx === selectedRouteIndex ? 'selected' : ''
-                        }`}
-                        onClick={() => setSelectedRouteIndex(idx)}
-                      >
-                        <div className="route-option-header">
-                          <span className="route-option-time">
-                            {formatDuration(route.duration)}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '0.72rem',
-                              fontWeight: 700,
-                              color: 'var(--primary)'
-                            }}
-                          >
-                            {getRouteLabel(route, idx)}
-                          </span>
-                        </div>
-                        <div className="route-option-details">
-                          {formatDistance(route.distance)} ·{' '}
-                          {route.hazardCount === 0
-                            ? 'Hazard-free'
-                            : `${route.hazardCount} hazard(s)`}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Turn-by-turn directions */}
-              <div style={{ marginTop: '1rem' }}>
-                <span
-                  style={{
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  Turn-by-turn Directions
-                </span>
-                <ol className="turn-list">
-                  {(selectedRoute.legs || [])
-                    .flatMap((leg) => leg.steps || [])
-                    .filter((step) => step && (step.name || step.maneuver))
-                    .map((step, idx) => (
-                      <li key={idx} className="turn-item">
-                        <span className="turn-icon">
-                          {step.maneuver?.type === 'arrive' ? '●' : '↗'}
-                        </span>
-                        <div>
-                          <span>{step.maneuver?.instruction || step.name}</span>
-                          {step.name && (
-                            <small
-                              style={{
-                                display: 'block',
-                                color: 'var(--text-muted)'
-                              }}
-                            >
-                              via {step.name}
-                            </small>
-                          )}
-                        </div>
-                        <span className="turn-dist">
-                          {formatDistance(step.distance)}
-                        </span>
-                      </li>
-                    ))}
-                </ol>
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                background: 'var(--bg-surface-alt)',
-                border: '1px dashed var(--border-strong)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '1.5rem',
-                textAlign: 'center',
-                color: 'var(--text-secondary)'
-              }}
-            >
-              <Compass
-                size={32}
-                style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}
-              />
-              <p style={{ fontSize: '0.875rem' }}>
-                Enter a start address and a destination location above, then click{' '}
-                <b>Navigate</b> to calculate live safe routes around hazards.
-              </p>
-            </div>
-          )}
         </div>
-      </aside>
+      )}
 
-      {/* Map Area */}
-      <div className="map-container-wrap">
-        <div ref={mapContainerRef} className="map-canvas" />
-
-        {/* Floating Mark Hazard Button */}
+      {/* BOTTOM COCKPIT TELEMETRY BAR */}
+      <div className="absolute bottom-5 right-5 z-20 flex items-center gap-3">
+        
+        {/* NavAI Copilot Quick Launcher Pill */}
         <button
           type="button"
-          className="floating-hazard-btn"
           onClick={() => {
-            setHazardModalPoint(null);
-            setHazardModalOpen(true);
+            if (onOpenNavAI) onOpenNavAI();
+            playSound('ai');
           }}
-          title="Report a hazard at my current location"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-2xl cyber-glass border border-cyan-500/40 hover:border-cyan-400 bg-slate-950/70 hover:bg-cyan-950/40 text-xs font-black text-cyan-300 shadow-xl transition-all active:scale-95 group cursor-pointer"
+          title="Summon NavAI Real-Time Route Copilot"
         >
-          <Plus size={18} /> Mark Hazard
+          <div className="relative">
+            <Bot className="w-4 h-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+          </div>
+          <span className="hidden sm:inline tracking-tight">NavAI</span>
+          <span className="px-1.5 py-0.2 rounded text-[8px] bg-cyan-500/20 text-cyan-300 font-mono">COPILOT</span>
         </button>
-      </div>
 
-      {/* Hazard Report Modal */}
-      <HazardModal
-        isOpen={hazardModalOpen}
-        initialPoint={hazardModalPoint}
-        onClose={() => {
-          setHazardModalOpen(false);
-          setHazardModalPoint(null);
-        }}
-        onCreated={async (newHazard) => {
-          await fetchHazards();
-          if (startCoords && endCoords) {
-            await calculateRoutes(startCoords, endCoords, [newHazard]);
-          }
-        }}
-        onToast={onToast}
-      />
+        {/* Telemetry Capsule: Time, Bearing */}
+        <div className="hidden sm:flex items-center gap-3 px-3.5 py-2 rounded-2xl cyber-glass text-xs font-bold text-slate-300 shadow-xl">
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-blue-400" />
+            <span className="font-mono">{currentTime}</span>
+          </div>
+
+          <span className="text-slate-600">•</span>
+
+          <div className="flex items-center gap-1.5">
+            <Compass
+              className="w-4 h-4 text-cyan-400 transition-transform duration-300"
+              style={{ transform: `rotate(${compassAngle}deg)` }}
+            />
+            <span className="font-mono">{Math.round(compassAngle)}° N</span>
+          </div>
+        </div>
+
+
+
+        {/* Zoom & Recenter Controls */}
+        <div className="flex rounded-2xl cyber-glass overflow-hidden p-1 gap-1 shadow-xl">
+          <button
+            type="button"
+            onClick={() => {
+              mapInstanceRef.current?.zoomIn();
+              playSound('click');
+            }}
+            className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+            title="Zoom In"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              mapInstanceRef.current?.zoomOut();
+              playSound('click');
+            }}
+            className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+            title="Zoom Out"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -79,6 +79,23 @@ export function HazardProvider({ children, onToast }) {
     return payload.data;
   };
 
+  const confirmHazard = async (id) => {
+    const response = await fetch(`/api/hazards/${encodeURIComponent(id)}/confirm`, {
+      method: 'POST'
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || 'Could not confirm hazard');
+    }
+    setHazards((prev) =>
+      prev.map((h) =>
+        h.id === id ? { ...h, confirmations: (h.confirmations || 1) + 1 } : h
+      )
+    );
+    return payload.data;
+    return payload.data;
+  };
+
   const stats = useMemo(() => {
     let active = 0;
     let scheduled = 0;
@@ -107,7 +124,8 @@ export function HazardProvider({ children, onToast }) {
         stats,
         fetchHazards,
         createHazard,
-        deleteHazard
+        deleteHazard,
+        confirmHazard
       }}
     >
       {children}

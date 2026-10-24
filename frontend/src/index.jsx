@@ -1,10 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from './context/ThemeContext';
-import { SessionProvider } from './context/SessionContext';
 import { HazardProvider } from './context/HazardContext';
 import { App } from './App';
-import './styles/unified.css';
+import './styles/index.css';
 
 const container = document.getElementById('root');
 if (container) {
@@ -12,11 +11,9 @@ if (container) {
   root.render(
     <React.StrictMode>
       <ThemeProvider>
-        <SessionProvider>
-          <HazardProvider>
-            <App />
-          </HazardProvider>
-        </SessionProvider>
+        <HazardProvider>
+          <App />
+        </HazardProvider>
       </ThemeProvider>
     </React.StrictMode>
   );

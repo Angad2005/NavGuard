@@ -1,18 +1,21 @@
 # NaviGuard
 
-NaviGuard is a safety-first navigation app that combines route planning with community-reported hazards. Users can plan routes, report hazards such as flooding or road damage, review active and scheduled incidents, and check weather conditions before travelling.
+NaviGuard is a safety-first navigation app that combines intelligent route planning with real-time community hazard intelligence. Users can plan routes, avoid obstacles such as flooding, debris, and road damage via Dijkstra/OSRM detours, report road incidents with photos and GPS coordinates, and monitor weather advisories.
 
 ## Highlights
 
-- Integrated **React** component-based frontend architecture with a unified design system
-- Global theme and accessibility system (Light / Dark mode, High Contrast, Warm Sepia, adjustable typography and scaling)
-- Seamless navigation between Map & Detours, Hazard Dashboard, and User Authentication without full page reloads
-- Interactive OpenStreetMap map with Leaflet, OSRM routes, and local road-graph fallback
-- Hazard-aware edge blocking, route comparison cards, and highlighted safe-route selection
-- Community hazard reporting with GPS location or interactive map click
-- Hazard dashboard with active, scheduled, and expired status filtering and real-time pulse metrics
-- Weather advisory lookup powered by Open-Meteo with 1-click hazard creation
-- Express backend with static frontend hosting and a shared hazards API
+- **Pure React SPA** with modern component architecture, clean state hooks, and high-performance rendering
+- **Tailwind CSS Design System** featuring glassmorphism, responsive floating cards, and polished Dark / Light theme switching
+- **Interactive OpenStreetMap Map** with Leaflet: custom SVG pin markers, 100m hazard danger-zone circles, and route polylines
+- **Intelligent Detour Engine**: Dijkstra / Yen's k-shortest-path fallback and OSRM alternatives that detect and avoid community road hazards
+- **Turn-by-Turn Navigation HUD & Drive Simulator**: Live step-by-step guidance, digital speedometer, and animated vehicle traversal
+- **Text-to-Speech Voice Guidance**: Built-in voice assistant alerting drivers of hazards and maneuvers in real time
+- **Emergency SOS Safe Haven Finder**: Instant lookup and 1-click emergency routing to nearest Hospitals, Police, Fire Stations, and Gas Services
+- **Route Safety Audit & GPX / GeoJSON Export**: Grade scoring, obstacle proximity analysis, estimated fuel/CO2 emissions, and standard GPX download
+- **Live Address Autocomplete**: Instant search suggestions for origins and destinations powered by Nominatim
+- **Community Hazard Voting & Verification**: Drivers confirm active obstacles or resolve cleared roads with real-time confirmation tallies
+- **Live Weather Advisory**: Open-Meteo integration delivering road conditions and 1-click weather hazard reporting
+- **Express Backend**: Serves the single-page React application at `/`, exposes static assets from `/dist` and `/uploads`, and powers the REST API
 
 ## Project structure
 
@@ -20,23 +23,21 @@ NaviGuard is a safety-first navigation app that combines route planning with com
 .
 ├── backend/
 │   ├── src/
-│   │   ├── dijkstra-router.js  # Routing engine, OSRM & OpenStreetMap graph
-│   │   └── server.js           # Express app, static hosting, and API routes
-│   └── test/                   # Routing and detour integration tests
+│   │   ├── dijkstra-router.js     # Routing engine, OSRM & OpenStreetMap graph
+│   │   └── server.js              # Express app, SPA static hosting, and REST API
+│   ├── test/                      # API, image upload, and routing integration tests
+│   └── uploads/                   # Sanitized user hazard photos (JPEG, PNG, WebP)
 ├── frontend/
-│   ├── dist/                   # Production-compiled React bundle (assets/app.js & app.css)
-│   ├── src/                    # React source code
-│   │   ├── components/         # Navbar, MapView, HazardDashboardView, LoginView, Modals, Toast
-│   │   ├── context/            # ThemeContext, SessionContext, HazardContext
-│   │   ├── styles/             # Unified design system & CSS tokens
-│   │   ├── utils/              # Geocoding, coordinates, and hazard math
-│   │   ├── App.jsx             # Top-level view switcher & notification coordinator
-│   │   └── index.jsx           # React DOM root entry point
-│   ├── Hazard.html             # Hazard dashboard entry page
-│   ├── login.html              # Login & sign-up entry page
-│   ├── main.html               # Map and route planner entry page
-│   └── index.html              # Vite dev server entry page
-├── vite.config.mjs             # Vite build configuration
+│   ├── dist/                      # Production Vite build (assets & index.html)
+│   ├── src/
+│   │   ├── components/            # MapView, HazardModal, HazardsDrawer, Navbar, WeatherAdvisoryCard, Toast
+│   │   ├── context/               # HazardContext, ThemeContext
+│   │   ├── styles/                # Tailwind CSS & map layer styling (index.css)
+│   │   ├── utils/                 # Geocoding, coordinates, and hazard math (geo.js)
+│   │   ├── App.jsx                # Top-level React coordinator
+│   │   └── index.jsx              # React DOM entry point
+│   └── index.html                 # Single-page application root entry
+├── vite.config.mjs                # Vite build & Tailwind configuration with backend proxy
 ├── package.json
 └── README.md
 ```
@@ -50,27 +51,27 @@ NaviGuard is a safety-first navigation app that combines route planning with com
 ## Quick start
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Build the React frontend
+# 2. Build the React frontend
 npm run build
 
-# Start the server
+# 3. Start the server
 npm start
 ```
 
-Then open [http://localhost:3000](http://localhost:3000). The server serves the app at the root URL. All views (Map, Hazard Dashboard, Login) are unified in React with instant switching, and direct URLs remain fully supported:
+Then open [http://localhost:3000](http://localhost:3000) to view NaviGuard.
 
-- [http://localhost:3000/main.html](http://localhost:3000/main.html)
-- [http://localhost:3000/Hazard.html](http://localhost:3000/Hazard.html)
+### Development Mode
 
-For development:
+Run the Express API backend and Vite frontend hot-reloader concurrently:
+
 ```bash
-# Run backend with nodemon
+# In terminal 1 (Backend API on http://localhost:3000)
 npm run dev
 
-# Or run Vite frontend dev server with hot-reload & API proxy
+# In terminal 2 (Vite Frontend with hot reload & API proxy on http://localhost:5173)
 npm run dev:frontend
 ```
 
@@ -81,14 +82,12 @@ The backend currently uses in-memory storage so it is easy to run locally. Data 
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/api/health` | Returns service status and timestamp |
-| `GET` | `/api/hazards` | Lists hazards held by the server |
-| `POST` | `/api/hazards` | Creates a hazard, optionally with `coordinates: { lat, lng }` and a JPEG, PNG, WebP, or GIF image (up to 5 MB) |
-| `DELETE` | `/api/hazards/:id` | Removes a hazard by ID |
+| `GET` | `/api/hazards` | Lists active and scheduled road hazards |
+| `POST` | `/api/hazards` | Creates a hazard, optionally with `coordinates: { lat, lng }` and an image (JPEG, PNG, WebP, GIF up to 5 MB) |
+| `DELETE` | `/api/hazards/:id` | Removes or resolves a hazard by ID |
 | `POST` | `/api/route` | Calculates hazard-free routes with Dijkstra over live OpenStreetMap road data |
 
-To attach a photo, submit `POST /api/hazards` as `multipart/form-data` with a `hazard` field containing the hazard JSON shown below and an optional `image` file. Uploaded photos are served from `/uploads/`; the report dashboard shows a thumbnail and map markers open a photo popup on hover. Without an image, the endpoint continues to accept the JSON request shown here.
-
-Example request:
+Example hazard creation request (`POST /api/hazards`):
 
 ```bash
 curl -X POST http://localhost:3000/api/hazards \
@@ -98,41 +97,21 @@ curl -X POST http://localhost:3000/api/hazards \
     "category": "Flooding",
     "severity": "High",
     "location": "Central Avenue",
-    "description": "Avoid until water level drops"
+    "description": "Avoid until water level drops",
+    "coordinates": { "lat": 28.6139, "lng": 77.209 }
   }'
 ```
 
-Example health response:
+To attach a photo, submit `POST /api/hazards` as `multipart/form-data` with a `hazard` JSON string field and an `image` file. Uploaded photos are served from `/uploads/`.
 
-```json
-{
-  "status": "ok",
-  "service": "naviguard-api",
-  "timestamp": "2026-10-13T03:52:39.765Z"
-}
+## Running Tests
+
+To run the test suite:
+
+```bash
+npm test
 ```
-
-## Routing behavior
-
-The route planner first requests OSRM alternatives and filters out paths within 100 meters of an active hazard. It returns safe OSRM routes immediately, so ordinary navigation does not wait for a local road-graph download. If all OSRM alternatives cross an active hazard, it first asks OSRM to route through detour points on either side of the affected road segment. The local OpenStreetMap graph is the fallback when OSRM cannot produce a safe route; it respects one-way streets and uses Yen's k-shortest-path algorithm over Dijkstra searches, excluding hazard-adjacent edges. Every returned path is checked against active hazards.
-
-The Overpass client sends an explicit `Accept` header, a descriptive `User-Agent`, and a standards-compliant form body. It automatically tries multiple public Overpass providers when one is rate-limited, unavailable, or rejects a request with HTTP 406. Providers can be customized with the comma-separated `OVERPASS_URLS` environment variable; see `.env.example`.
-
-## Current limitations
-
-- Authentication and user accounts are currently a browser-only demo backed by `localStorage`; passwords should not be stored this way in production.
-- The hazards API uses in-memory storage and should be connected to a database before deployment.
-- Routing (Overpass/OpenStreetMap), geocoding (Nominatim), map tiles (OpenStreetMap), and weather data use third-party services and are subject to their usage policies. Overpass availability and its public rate limits can affect route calculation.
-- No production secrets are required for the current demo.
-
-## Recommended next steps
-
-1. Connect the frontend hazard dashboard to the `/api/hazards` endpoints.
-2. Add a persistent database and migrations.
-3. Replace demo authentication with a secure server-side identity flow.
-4. Add automated tests for API validation and hazard lifecycle behavior.
-5. Add request logging, rate limiting, and deployment configuration.
 
 ## License
 
-This project is currently intended for educational and prototype use. Add a project-specific license before publishing it for external reuse.
+This project is currently intended for educational and prototype use.
