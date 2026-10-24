@@ -11,6 +11,8 @@ export function HazardModal({ isOpen, initialPoint, onClose, onCreated, onToast 
   const [severity, setSeverity] = useState('Medium');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [scheduled, setScheduled] = useState(false);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -27,6 +29,7 @@ export function HazardModal({ isOpen, initialPoint, onClose, onCreated, onToast 
       setSeverity('Medium');
       setLocation('');
       setDescription('');
+      setImageFile(null);
       setScheduled(false);
       setStart('');
       setEnd('');
@@ -64,6 +67,17 @@ export function HazardModal({ isOpen, initialPoint, onClose, onCreated, onToast 
     resolveInitLocation();
   }, [isOpen, initialPoint]);
 
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl('');
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(imageFile);
+    setImagePreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [imageFile]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
@@ -80,6 +94,10 @@ export function HazardModal({ isOpen, initialPoint, onClose, onCreated, onToast 
     }
     if (!location.trim()) {
       setErrorMessage('Location description is required.');
+      return;
+    }
+    if (imageFile && imageFile.size > 5 * 1024 * 1024) {
+      setErrorMessage('Image must be 5 MB or smaller.');
       return;
     }
 
@@ -112,7 +130,7 @@ export function HazardModal({ isOpen, initialPoint, onClose, onCreated, onToast 
         }
       };
 
-      const created = await createHazard(hazardData);
+      const created = await createHazard(hazardData, imageFile);
       if (onToast) onToast('Hazard reported successfully!', 'success');
       if (onCreated) onCreated(created);
       onClose();
@@ -261,6 +279,29 @@ export function HazardModal({ isOpen, initialPoint, onClose, onCreated, onToast 
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
+            </div>
+
+            <div className="form-field-group">
+              <label htmlFor="hz-image" className="field-label">
+                Hazard Photo (Optional)
+              </label>
+              <input
+                id="hz-image"
+                type="file"
+                className="form-input"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(event) => setImageFile(event.target.files?.[0] || null)}
+              />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                JPEG, PNG, WebP, or GIF · up to 5 MB
+              </span>
+              {imagePreviewUrl && (
+                <img
+                  className="hazard-upload-preview"
+                  src={imagePreviewUrl}
+                  alt="Selected hazard preview"
+                />
+              )}
             </div>
 
             {/* Scheduled window toggle */}

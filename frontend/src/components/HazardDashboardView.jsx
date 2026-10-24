@@ -255,6 +255,14 @@ export function HazardDashboardView({ onToast }) {
 
                 return (
                   <div key={hazard.id} className="hazard-item-card">
+                    {hazard.imageUrl && (
+                      <img
+                        className="hazard-item-image"
+                        src={hazard.imageUrl}
+                        alt={`${hazard.title} hazard`}
+                        loading="lazy"
+                      />
+                    )}
                     <div className="hazard-item-info">
                       <div className="hazard-item-title">{hazard.title}</div>
                       <div className="hazard-item-tags">

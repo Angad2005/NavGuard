@@ -41,11 +41,20 @@ export function HazardProvider({ children, onToast }) {
     } catch {}
   };
 
-  const createHazard = async (hazardData) => {
+  const createHazard = async (hazardData, imageFile = null) => {
+    let body = JSON.stringify(hazardData);
+    const headers = { 'Content-Type': 'application/json' };
+    if (imageFile) {
+      body = new FormData();
+      body.append('hazard', JSON.stringify(hazardData));
+      body.append('image', imageFile);
+      delete headers['Content-Type'];
+    }
+
     const response = await fetch('/api/hazards', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(hazardData)
+      headers,
+      body
     });
     const payload = await response.json();
     if (!response.ok) {

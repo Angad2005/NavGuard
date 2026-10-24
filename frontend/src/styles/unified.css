@@ -902,6 +902,15 @@ body.theme-dark .leaflet-container {
   border-color: var(--border-strong);
 }
 
+.hazard-item-image {
+  width: 128px;
+  height: 96px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--bg-surface);
+}
+
 .hazard-item-info {
   display: flex;
   flex-direction: column;
@@ -955,6 +964,24 @@ body.theme-dark .leaflet-container {
   font-size: 0.85rem;
   color: var(--text-secondary);
   margin-top: 0.25rem;
+}
+
+.hazard-upload-preview {
+  width: min(100%, 240px);
+  max-height: 160px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
+.map-hazard-image {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  max-height: 150px;
+  margin: 0 0 0.5rem;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
 }
 
 /* Weather Advisory Widget */

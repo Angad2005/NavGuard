@@ -82,9 +82,11 @@ The backend currently uses in-memory storage so it is easy to run locally. Data 
 | --- | --- | --- |
 | `GET` | `/api/health` | Returns service status and timestamp |
 | `GET` | `/api/hazards` | Lists hazards held by the server |
-| `POST` | `/api/hazards` | Creates a hazard, optionally with `coordinates: { lat, lng }` |
+| `POST` | `/api/hazards` | Creates a hazard, optionally with `coordinates: { lat, lng }` and a JPEG, PNG, WebP, or GIF image (up to 5 MB) |
 | `DELETE` | `/api/hazards/:id` | Removes a hazard by ID |
 | `POST` | `/api/route` | Calculates hazard-free routes with Dijkstra over live OpenStreetMap road data |
+
+To attach a photo, submit `POST /api/hazards` as `multipart/form-data` with a `hazard` field containing the hazard JSON shown below and an optional `image` file. Uploaded photos are served from `/uploads/`; the report dashboard shows a thumbnail and map markers open a photo popup on hover. Without an image, the endpoint continues to accept the JSON request shown here.
 
 Example request:
 

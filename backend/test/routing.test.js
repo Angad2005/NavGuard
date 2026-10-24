@@ -69,7 +69,7 @@ function getPostHandler(path) {
     item.route && item.route.path === path && item.route.methods.post
   ));
   assert.ok(layer, `Expected an Express route for ${path}`);
-  const handlerLayer = layer.route.stack[0];
+  const handlerLayer = layer.route.stack.at(-1);
   assert.ok(handlerLayer, `Expected a POST handler for ${path}`);
   return handlerLayer.handle;
 }

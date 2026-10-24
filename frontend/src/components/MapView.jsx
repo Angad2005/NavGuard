@@ -108,25 +108,41 @@ export function MapView({ onToast }) {
         color: color,
         fillColor: color,
         fillOpacity: 0.88,
-        weight: 2
+        weight: 2,
+        bubblingMouseEvents: false
       }).addTo(map);
 
-      // Custom HTML popup with direct React/DOM action
       const popupDiv = document.createElement('div');
       popupDiv.style.fontFamily = 'var(--font-family)';
       popupDiv.style.fontSize = '13px';
       popupDiv.style.minWidth = '180px';
-      popupDiv.innerHTML = `
-        <div style="font-weight:700;font-size:14px;color:#0f172a;margin-bottom:4px;">
-          ${hazard.title}
-        </div>
-        <div style="color:#64748b;margin-bottom:2px;">
-          <b>Category:</b> ${hazard.category}
-        </div>
-        <div style="color:#64748b;margin-bottom:6px;">
-          <b>Severity:</b> <span style="font-weight:600;color:${color}">${hazard.severity}</span>
-        </div>
-      `;
+      const title = document.createElement('div');
+      title.textContent = hazard.title;
+      title.style.cssText = 'font-weight:700;font-size:14px;color:#0f172a;margin-bottom:4px;';
+      popupDiv.appendChild(title);
+
+      if (hazard.imageUrl) {
+        const image = document.createElement('img');
+        image.src = hazard.imageUrl;
+        image.alt = `${hazard.title} hazard`;
+        image.className = 'map-hazard-image';
+        popupDiv.appendChild(image);
+      }
+
+      const category = document.createElement('div');
+      category.textContent = `Category: ${hazard.category}`;
+      category.style.cssText = 'color:#64748b;margin-bottom:2px;';
+      popupDiv.appendChild(category);
+
+      const severity = document.createElement('div');
+      severity.style.cssText = 'color:#64748b;margin-bottom:6px;';
+      const severityLabel = document.createElement('b');
+      severityLabel.textContent = 'Severity: ';
+      const severityValue = document.createElement('span');
+      severityValue.textContent = hazard.severity;
+      severityValue.style.cssText = `font-weight:600;color:${color}`;
+      severity.append(severityLabel, severityValue);
+      popupDiv.appendChild(severity);
 
       const deleteBtn = document.createElement('button');
       deleteBtn.innerText = 'Delete Hazard';
@@ -145,6 +161,23 @@ export function MapView({ onToast }) {
 
       popupDiv.appendChild(deleteBtn);
       marker.bindPopup(popupDiv);
+      let closePopupTimer;
+      const schedulePopupClose = () => {
+        window.clearTimeout(closePopupTimer);
+        closePopupTimer = window.setTimeout(() => marker.closePopup(), 1500);
+      };
+      marker.on('mouseover', () => {
+        window.clearTimeout(closePopupTimer);
+        marker.openPopup();
+      });
+      marker.on('mouseout', schedulePopupClose);
+      marker.on('popupopen', (event) => {
+        const popupElement = event.popup.getElement();
+        if (!popupElement) return;
+        popupElement.onmouseenter = () => window.clearTimeout(closePopupTimer);
+        popupElement.onmouseleave = schedulePopupClose;
+      });
+      marker.on('remove', () => window.clearTimeout(closePopupTimer));
       hazardLayersRef.current.push(marker);
     });
   }, [hazards, deleteHazard, onToast]);
