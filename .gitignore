@@ -1,6 +1,7 @@
 node_modules/
 /backend/uploads/
 .env
+/.jwt-secret
 npm-debug.log*
 .DS_Store
 .vscode/

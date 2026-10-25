@@ -16,6 +16,8 @@ import {
   routeTouchesHazard
 } from './utils/geo';
 import { playSound, speakNavAI } from './utils/audio';
+import { apiFetch } from './utils/api';
+import { fetchWeatherForPoint } from './utils/weather';
 
 export function App() {
   const { hazards, activeHazardsList } = useHazards();
@@ -82,30 +84,27 @@ export function App() {
   };
 
   // Initial user location and weather fetch
+  const loadWeatherForPoint = useCallback(async (point) => {
+    try {
+      setWeatherData(await fetchWeatherForPoint(point));
+    } catch (error) {
+      console.warn('Live weather unavailable:', error);
+      addToast(error.message || 'Could not load live weather.', 'error');
+    }
+  }, [addToast]);
+
   useEffect(() => {
     getDeviceLocation()
       .then((loc) => {
         setUserLocation(loc);
-        fetchWeatherForPoint(loc);
+        loadWeatherForPoint(loc);
       })
       .catch(() => {
         const defaultPt = { lat: 28.6139, lng: 77.209 };
         setUserLocation(defaultPt);
-        fetchWeatherForPoint(defaultPt);
+        loadWeatherForPoint(defaultPt);
       });
-  }, []);
-
-  const fetchWeatherForPoint = async (pt) => {
-    try {
-      const res = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${pt.lat}&longitude=${pt.lng}&current_weather=true`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setWeatherData(data.current_weather);
-      }
-    } catch {}
-  };
+  }, [loadWeatherForPoint]);
 
   // Autocomplete debouncers
   useEffect(() => {
@@ -211,6 +210,7 @@ export function App() {
       const pos = await getDeviceLocation();
       setStartCoords(pos);
       setUserLocation(pos);
+      loadWeatherForPoint(pos);
       if (window.__naviguard_focus) window.__naviguard_focus(pos);
       const name = await reverseGeocodePoint(pos);
       setStartQuery(name ? name.split(',').slice(0, 2).join(',') : 'Current GPS Location');
@@ -299,7 +299,7 @@ export function App() {
 
     setRouting(true);
     try {
-      const res = await fetch('/api/route', {
+      const res = await apiFetch('/api/route', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -348,7 +348,7 @@ export function App() {
     if (!touches) return;
 
     try {
-      const res = await fetch('/api/route', {
+      const res = await apiFetch('/api/route', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,9 +1,20 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
+const { after, before, test } = require('node:test');
 const { generateNavAIResponse, analyzeRouteHazards, evaluateGuardrails, describeWeatherCode } = require('../src/navai-engine');
 const app = require('../src/server');
+const { registerUser, startTestDatabase } = require('../test-support/mongo-setup');
+
+let stopDatabase;
+
+before(async () => {
+  stopDatabase = await startTestDatabase();
+});
+
+after(async () => {
+  await stopDatabase();
+});
 
 test('NavAI generates pre-departure briefing with live telemetry', async () => {
   const telemetry = {
@@ -227,21 +238,23 @@ test('NavAI answers road condition and traffic flow naturally (English & Hinglis
 
 test('POST /api/navai/chat endpoint validates message, accepts optional apiKey, and returns response', async () => {
   const server = app.listen(0);
-  const port = server.address().port;
+  await new Promise((resolve) => server.once('listening', resolve));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const token = (await registerUser(baseUrl, 'navai_driver')).token;
 
   try {
     // 1. Missing message rejection
-    const invalidRes = await fetch(`http://127.0.0.1:${port}/api/navai/chat`, {
+    const invalidRes = await fetch(`${baseUrl}/api/navai/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({})
     });
     assert.equal(invalidRes.status, 400);
 
     // 2. Valid inquiry
-    const validRes = await fetch(`http://127.0.0.1:${port}/api/navai/chat`, {
+    const validRes = await fetch(`${baseUrl}/api/navai/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: 'Is my route safe from road obstacles?',
         telemetry: {
@@ -264,6 +277,6 @@ test('POST /api/navai/chat endpoint validates message, accepts optional apiKey, 
     assert.ok(body.data.text.length > 20);
     assert.equal(typeof body.data.safetyScore, 'number');
   } finally {
-    server.close();
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
 });

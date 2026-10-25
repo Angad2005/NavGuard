@@ -37,6 +37,7 @@ import {
   Bot
 } from 'lucide-react';
 import { useHazards } from '../context/HazardContext';
+import { ProtectedHazardImage } from './ProtectedHazardImage';
 import {
   formatDuration,
   formatDistance,
@@ -629,12 +630,12 @@ export function SidebarDock({
                                   onClick={() => setSelectedPhoto(h.imageUrl)}
                                   className="w-14 h-14 rounded-xl overflow-hidden border border-white/15 shrink-0 hover:ring-2 hover:ring-blue-500 transition-all"
                                 >
-                                  <img src={h.imageUrl} alt={h.title} className="w-full h-full object-cover" />
+                                  <ProtectedHazardImage src={h.imageUrl} alt={h.title} className="w-full h-full object-cover" />
                                 </button>
                               )}
                             </div>
 
-                            {/* Community Verification & Action Row */}
+                            {/* Personal hazard report actions */}
                             <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[11px]">
                               <button
                                 type="button"
@@ -921,7 +922,7 @@ export function SidebarDock({
             >
               <X className="w-5 h-5" />
             </button>
-            <img src={selectedPhoto} alt="Hazard photo" className="w-full h-auto max-h-[80vh] object-contain" />
+            <ProtectedHazardImage src={selectedPhoto} alt="Hazard photo" className="w-full h-auto max-h-[80vh] object-contain" />
           </div>
         </div>
       )}

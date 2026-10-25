@@ -18,6 +18,7 @@ import {
   Sparkles,
   Snowflake
 } from 'lucide-react';
+import { fetchWeatherForPoint } from '../utils/weather';
 
 const WEATHER_CODES = {
   0: { label: 'Clear Sky', advisory: 'Optimum road grip & dry pavement', risk: 'low', badge: 'DRY ROADS' },
@@ -52,13 +53,9 @@ export function WeatherAdvisoryCard({
     if (!coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&current_weather=true`
-      );
-      if (!res.ok) throw new Error('Weather API unavailable');
-      const data = await res.json();
-      setWeather(data.current_weather);
-      if (onWeatherChange) onWeatherChange(data.current_weather);
+      const currentWeather = await fetchWeatherForPoint(coords);
+      setWeather(currentWeather);
+      if (onWeatherChange) onWeatherChange(currentWeather);
     } catch (err) {
       console.warn('Weather fetch warning:', err);
     } finally {

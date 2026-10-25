@@ -203,7 +203,7 @@ Detour Status: ${isDetour ? 'Active Safe Detour' : 'Direct Corridor'}`;
         {/* Hazard Proximity Audit List */}
         <div className="mt-4">
           <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block mb-2">
-            Nearby Community Hazards ({nearbyHazards.length})
+            Nearby Hazards ({nearbyHazards.length})
           </span>
 
           {nearbyHazards.length === 0 ? (

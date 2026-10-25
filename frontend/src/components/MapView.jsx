@@ -406,7 +406,6 @@ export function MapView({
             <span style="background: ${getHazardColor(h.category, h.severity)}22; color: ${getHazardColor(h.category, h.severity)}; padding: 2px 6px; border-radius: 6px; font-weight: 700; font-size: 10px;">${h.severity}</span>
           </div>
           <div style="color: #64748b; font-size: 11px; margin-bottom: 6px;">${h.category} • ${h.location}</div>
-          ${h.imageUrl ? `<img src="${h.imageUrl}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 10px; margin-bottom: 6px;" />` : ''}
           ${h.description ? `<p style="color: #475569; font-size: 11px; line-height: 1.4; margin-bottom: 6px;">${h.description}</p>` : ''}
           <div style="font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 4px;">Obstacle (${h.confirmations || 1} verified)</div>
         </div>
