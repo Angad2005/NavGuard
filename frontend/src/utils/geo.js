@@ -112,13 +112,29 @@ export function formatDistance(meters) {
   return `${(numericMeters / 1000).toFixed(1)} km`;
 }
 
-export async function geocodeAddress(addressQuery) {
+export async function geocodeAddress(addressQuery, nearPoint = null) {
   if (!addressQuery || !addressQuery.trim()) return null;
   try {
+    const params = new URLSearchParams({
+      format: 'jsonv2',
+      limit: '1',
+      addressdetails: '1',
+      q: addressQuery.trim()
+    });
+    if (
+      nearPoint &&
+      Number.isFinite(nearPoint.lat) &&
+      Number.isFinite(nearPoint.lng)
+    ) {
+      const span = 1;
+      params.set(
+        'viewbox',
+        `${nearPoint.lng - span},${nearPoint.lat + span},${nearPoint.lng + span},${nearPoint.lat - span}`
+      );
+      params.set('bounded', '1');
+    }
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&q=${encodeURIComponent(
-        addressQuery.trim()
-      )}`
+      `https://nominatim.openstreetmap.org/search?${params.toString()}`
     );
     if (!response.ok) throw new Error('Geocoder unavailable');
     const results = await response.json();

@@ -10,7 +10,8 @@ NaviGuard is a safety-first navigation app that combines intelligent route plann
 - **Intelligent Detour Engine**: Dijkstra / Yen's k-shortest-path fallback and OSRM alternatives that detect and avoid the signed-in user's reported hazards
 - **Turn-by-Turn Navigation HUD & Drive Simulator**: Live step-by-step guidance, digital speedometer, and animated vehicle traversal
 - **Text-to-Speech Voice Guidance**: Built-in voice assistant alerting drivers of hazards and maneuvers in real time
-- **Emergency SOS Safe Haven Finder**: Instant lookup and 1-click emergency routing to nearest Hospitals, Police, Fire Stations, and Gas Services
+- **Emergency SOS Safe Haven Finder**: Uses the device's current GPS fix to find nearby hospitals, police stations, and fire stations from OpenStreetMap, then calculates a safe route to a selected facility
+- **Saved Places & Routes**: Keep account-scoped places and photos in MongoDB, add saved places as ordered route stops, and save/reload complete multi-stop routes
 - **Route Safety Audit & GPX / GeoJSON Export**: Grade scoring, obstacle proximity analysis, estimated fuel/CO2 emissions, and standard GPX download
 - **Live Address Autocomplete**: Instant search suggestions for origins and destinations powered by Nominatim
 - **Private Hazard Reporting**: Each signed-in user can view, confirm, route around, and resolve only their own saved hazards
@@ -72,7 +73,8 @@ npm start
 Then open [http://localhost:3000](http://localhost:3000) to view NaviGuard.
 Create an account or sign in before accessing the application. Passwords are
 hashed before they are saved in MongoDB. The browser stores only the signed
-session token and profile, plus a local hazard cache scoped to that user's ID;
+session token and profile, plus local hazards, saved places, and saved routes
+scoped to that user's ID;
 MongoDB remains the source of truth.
 
 ### Development Mode
@@ -89,7 +91,7 @@ npm run dev:frontend
 
 ## API
 
-Accounts and hazards are persisted in MongoDB. Every endpoint below except
+Accounts, hazards, and saved places are persisted in MongoDB. Every endpoint below except
 `/api/health`, `/api/auth/register`, and `/api/auth/login` requires an
 `Authorization: Bearer <token>` header. Hazard lists, edits, confirmations,
 routes, and photographs are scoped to the authenticated account.
@@ -106,6 +108,10 @@ routes, and photographs are scoped to the authenticated account.
 | `GET` | `/api/hazards/:id/image` | Serves a photo only to its owner |
 | `DELETE` | `/api/hazards/:id` | Removes the signed-in user's hazard |
 | `POST` | `/api/hazards/:id/confirm` | Confirms one of the signed-in user's hazards |
+| `GET` | `/api/places` | Lists the signed-in user's saved places |
+| `POST` | `/api/places` | Saves a named location, optionally with a JPEG, PNG, WebP, or GIF photo |
+| `GET` | `/api/places/:id/image` | Serves a saved-place photo only to its owner |
+| `DELETE` | `/api/places/:id` | Removes a saved place |
 | `POST` | `/api/route` | Calculates routes while avoiding only the signed-in user's hazards |
 
 Example account creation request (`POST /api/auth/register`):
@@ -117,6 +123,9 @@ curl -X POST http://localhost:3000/api/auth/register \
 ```
 
 Use the returned token in the `Authorization` header for authenticated requests.
+Saved places are available from the Places dashboard tab, where uploaded photos
+are shown at larger size. Photos are image-validated, limited to 5 MB, and
+account-scoped; saved routes remain stored locally for the signed-in account.
 To attach a photo, submit `POST /api/hazards` as `multipart/form-data` with a
 `hazard` JSON string field and an `image` file (JPEG, PNG, WebP, or GIF up to
 5 MB). Photo bytes are stored in MongoDB and served through the owner-checked

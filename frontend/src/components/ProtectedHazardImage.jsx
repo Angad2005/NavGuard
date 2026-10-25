@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '../utils/api';
 
-export function ProtectedHazardImage({ src, alt, className }) {
+export function ProtectedImage({ src, alt, className }) {
   const [objectUrl, setObjectUrl] = useState('');
 
   useEffect(() => {
@@ -11,7 +11,7 @@ export function ProtectedHazardImage({ src, alt, className }) {
 
     apiFetch(src)
       .then(async (response) => {
-        if (!response.ok) throw new Error('Could not load the hazard photo.');
+        if (!response.ok) throw new Error('Could not load the saved image.');
         url = URL.createObjectURL(await response.blob());
         if (active) setObjectUrl(url);
         else URL.revokeObjectURL(url);
@@ -26,3 +26,5 @@ export function ProtectedHazardImage({ src, alt, className }) {
 
   return <img src={objectUrl || undefined} alt={alt} className={className} />;
 }
+
+export const ProtectedHazardImage = ProtectedImage;

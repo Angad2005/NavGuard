@@ -172,6 +172,7 @@ export function MapView({
   endCoords,
   setEndCoords,
   setEndQuery,
+  routeWaypoints = [],
   routeResults,
   selectedRouteIndex,
   setSelectedRouteIndex,
@@ -195,6 +196,7 @@ export function MapView({
   const hazardLayersRef = useRef([]);
   const startMarkerRef = useRef(null);
   const endMarkerRef = useRef(null);
+  const waypointMarkersRef = useRef([]);
   const vehicleMarkerRef = useRef(null);
 
   const selectedLayerKey = 'streets';
@@ -371,6 +373,27 @@ export function MapView({
       endMarkerRef.current = null;
     }
   }, [startCoords, endCoords]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    waypointMarkersRef.current.forEach((marker) => marker.remove());
+    waypointMarkersRef.current = routeWaypoints.map((waypoint, index) => {
+      const coordinates = waypoint.coordinates || waypoint;
+      return L.marker([coordinates.lat, coordinates.lng], {
+        icon: createLocationMarker(String(index + 1), '#f59e0b'),
+        zIndexOffset: 500
+      })
+        .addTo(map)
+        .bindPopup(`<b>Route stop ${index + 1}</b><br>${waypoint.name || 'Saved place'}`);
+    });
+
+    return () => {
+      waypointMarkersRef.current.forEach((marker) => marker.remove());
+      waypointMarkersRef.current = [];
+    };
+  }, [routeWaypoints]);
 
   // Render Hazards and Danger Zones
   useEffect(() => {

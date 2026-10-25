@@ -14,6 +14,7 @@ const { calculateDijkstraRoutes } = require('./dijkstra-router');
 const { generateNavAIResponse } = require('./navai-engine');
 const User = require('./models/User');
 const Hazard = require('./models/Hazard');
+const SavedPlace = require('./models/SavedPlace');
 const { connectDatabase } = require('./database');
 const { createToken, getJwtSecret, requireAuth, serializeUser } = require('./auth');
 
@@ -47,7 +48,7 @@ const upload = multer({
   limits: {
     fileSize: MAX_IMAGE_BYTES,
     files: 1,
-    fields: 1,
+    fields: 2,
     fieldSize: MAX_MULTIPART_FIELD_BYTES
   },
   fileFilter: (_req, file, callback) => {
@@ -328,6 +329,107 @@ app.get('/api/hazards', async (req, res, next) => {
   }
 });
 
+function serializeSavedPlace(place) {
+  return {
+    id: place.id,
+    name: place.name,
+    coordinates: place.coordinates,
+    imageUrl: place.hasImage
+      ? `/api/places/${encodeURIComponent(place.id)}/image`
+      : null,
+    createdAt: place.createdAt
+  };
+}
+
+app.get('/api/places', async (req, res, next) => {
+  try {
+    const places = await SavedPlace.find({ ownerId: req.user._id }).sort({ createdAt: -1 }).lean();
+    return res.json({ data: places.map(serializeSavedPlace) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post('/api/places', upload.single('image'), async (req, res, next) => {
+  try {
+    const body = isPlainObject(req.body) ? req.body : {};
+    let submittedCoordinates = body.coordinates;
+    if (typeof submittedCoordinates === 'string') {
+      try {
+        submittedCoordinates = JSON.parse(submittedCoordinates);
+      } catch {
+        return res.status(400).json({ error: 'Place coordinates must contain valid JSON.' });
+      }
+    }
+
+    const name = cleanText(body.name, MAX_TITLE_LENGTH);
+    const coordinates = normalizePoint(submittedCoordinates);
+    if (!name || !coordinates) {
+      return res.status(400).json({
+        error: 'A place name and valid coordinates are required.'
+      });
+    }
+
+    let imageData = null;
+    let imageMimeType = null;
+    if (req.file) {
+      const sanitizedImage = await sanitizeImageBuffer(req.file.buffer, req.file.mimetype);
+      if (!sanitizedImage) {
+        return res.status(400).json({ error: 'The uploaded file is not a valid supported image.' });
+      }
+      if (sanitizedImage.length > MAX_IMAGE_BYTES) {
+        return res.status(413).json({ error: 'The processed image must be 5 MB or smaller.' });
+      }
+      imageData = sanitizedImage;
+      imageMimeType = req.file.mimetype;
+    }
+
+    const place = await SavedPlace.create({
+      id: `place_${randomUUID()}`,
+      ownerId: req.user._id,
+      name,
+      coordinates,
+      hasImage: Boolean(imageData),
+      imageData,
+      imageMimeType
+    });
+    return res.status(201).json({ data: serializeSavedPlace(place.toObject()) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/api/places/:id/image', async (req, res, next) => {
+  try {
+    const place = await SavedPlace.findOne({
+      id: req.params.id,
+      ownerId: req.user._id
+    }).select('+imageData +imageMimeType').lean();
+    if (!place || !place.imageData) {
+      return res.status(404).json({ error: 'Saved place image not found.' });
+    }
+    res.set('Cache-Control', 'private, no-store');
+    return res.type(place.imageMimeType).send(place.imageData.value());
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.delete('/api/places/:id', async (req, res, next) => {
+  try {
+    const place = await SavedPlace.findOneAndDelete({
+      id: req.params.id,
+      ownerId: req.user._id
+    });
+    if (!place) {
+      return res.status(404).json({ error: 'Saved place not found.' });
+    }
+    return res.json({ data: serializeSavedPlace(place.toObject()) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.post('/api/route', async (req, res, next) => {
   try {
     const body = isPlainObject(req.body) ? req.body : {};
@@ -578,4 +680,4 @@ if (require.main === module) {
 }
 
 module.exports = app;
-module.exports.models = { Hazard, User };
+module.exports.models = { Hazard, SavedPlace, User };
