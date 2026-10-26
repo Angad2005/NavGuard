@@ -7,8 +7,8 @@ export function WeatherCanvasOverlay({
   soundEnabled = false
 }) {
   const canvasRef = useRef(null);
+  const lightningOverlayRef = useRef(null);
   const [activeWeather, setActiveWeather] = useState('clear');
-  const [lightningFlash, setLightningFlash] = useState(false);
 
   // Determine active weather type based on code or manual override
   useEffect(() => {
@@ -49,64 +49,72 @@ export function WeatherCanvasOverlay({
     };
   }, [activeWeather, soundEnabled]);
 
-  // Canvas Animation Engine
+  // Canvas Animation Engine (Throttled & Batched for 60fps Silk Smoothness)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || activeWeather === 'clear') return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: true });
     let animationFrameId = null;
-    let width = (canvas.width = canvas.parentElement.clientWidth);
-    let height = (canvas.height = canvas.parentElement.clientHeight);
+    let width = (canvas.width = canvas.parentElement?.clientWidth || window.innerWidth);
+    let height = (canvas.height = canvas.parentElement?.clientHeight || window.innerHeight);
 
     const handleResize = () => {
+      if (!canvas || !canvas.parentElement) return;
       width = canvas.width = canvas.parentElement.clientWidth;
       height = canvas.height = canvas.parentElement.clientHeight;
     };
     window.addEventListener('resize', handleResize);
 
-    // Particle States
-    const dropCount = activeWeather === 'storm' ? 320 : activeWeather === 'rain' ? 180 : 100;
+    // Optimized Particle States (Balanced density and ultra-low CPU/GPU overhead)
+    const isStorm = activeWeather === 'storm';
+    const dropCount = isStorm ? 130 : activeWeather === 'rain' ? 85 : 50;
     const drops = [];
     const splashes = [];
     const snowflakes = [];
 
-    if (activeWeather === 'rain' || activeWeather === 'storm') {
+    if (activeWeather === 'rain' || isStorm) {
       for (let i = 0; i < dropCount; i++) {
         drops.push({
-          x: Math.random() * width,
+          x: Math.random() * (width + 200),
           y: Math.random() * height,
-          length: activeWeather === 'storm' ? Math.random() * 24 + 16 : Math.random() * 18 + 10,
-          speed: activeWeather === 'storm' ? Math.random() * 14 + 20 : Math.random() * 10 + 14,
-          opacity: Math.random() * 0.45 + 0.35,
-          angle: activeWeather === 'storm' ? 0.28 : 0.16
+          length: isStorm ? Math.random() * 20 + 16 : Math.random() * 14 + 10,
+          speed: isStorm ? Math.random() * 8 + 18 : Math.random() * 6 + 12,
+          angle: isStorm ? 0.26 : 0.15
         });
       }
     } else if (activeWeather === 'snow') {
-      for (let i = 0; i < 110; i++) {
+      for (let i = 0; i < 70; i++) {
         snowflakes.push({
           x: Math.random() * width,
           y: Math.random() * height,
-          radius: Math.random() * 2.5 + 1.2,
-          speed: Math.random() * 1.4 + 0.8,
-          sway: Math.random() * 2 + 1,
+          radius: Math.random() * 2.2 + 1.2,
+          speed: Math.random() * 1.2 + 0.7,
+          sway: Math.random() * 1.8 + 0.8,
           phase: Math.random() * Math.PI * 2,
-          opacity: Math.random() * 0.6 + 0.3
+          opacity: Math.random() * 0.5 + 0.35
         });
       }
     }
 
-    // Lightning Flash Scheduler for Storm
+    // Direct DOM Lightning Flash (No React re-renders)
     let lightningTimeout = null;
-    if (activeWeather === 'storm') {
+    if (isStorm) {
       const scheduleLightning = () => {
         lightningTimeout = setTimeout(() => {
-          setLightningFlash(true);
-          setTimeout(() => setLightningFlash(false), 90);
-          setTimeout(() => {
-            setLightningFlash(true);
-            setTimeout(() => setLightningFlash(false), 60);
-          }, 140);
+          const el = lightningOverlayRef.current;
+          if (el) {
+            el.style.opacity = '1';
+            setTimeout(() => {
+              if (el) el.style.opacity = '0';
+            }, 80);
+            setTimeout(() => {
+              if (el) el.style.opacity = '0.9';
+              setTimeout(() => {
+                if (el) el.style.opacity = '0';
+              }, 60);
+            }, 130);
+          }
           scheduleLightning();
         }, Math.random() * 7000 + 4000);
       };
@@ -114,71 +122,79 @@ export function WeatherCanvasOverlay({
     }
 
     let time = 0;
+    let lastRenderTime = performance.now();
+    const frameInterval = 28; // Cap canvas at ~35 FPS to leave 100% GPU/CPU headroom for map pan & UI
 
-    const render = () => {
-      time += 0.02;
+    const render = (now) => {
+      animationFrameId = requestAnimationFrame(render);
+
+      const delta = now - lastRenderTime;
+      if (delta < frameInterval) return;
+      lastRenderTime = now - (delta % frameInterval);
+
+      time += 0.03;
       ctx.clearRect(0, 0, width, height);
 
-      // 1. Render Rain / Storm
-      if (activeWeather === 'rain' || activeWeather === 'storm') {
-        ctx.lineWidth = activeWeather === 'storm' ? 1.6 : 1.2;
+      // 1. Batched Rain / Storm
+      if (activeWeather === 'rain' || isStorm) {
+        ctx.lineWidth = isStorm ? 1.5 : 1.2;
+        ctx.strokeStyle = isStorm ? 'rgba(186, 230, 253, 0.45)' : 'rgba(186, 230, 253, 0.35)';
 
+        // SINGLE BATCH PATH FOR ALL RAINDROPS (Massive FPS boost)
+        ctx.beginPath();
         for (let i = 0; i < drops.length; i++) {
           const d = drops[i];
-
-          // Rain streak
-          ctx.strokeStyle = `rgba(186, 230, 253, ${d.opacity})`;
-          ctx.beginPath();
+          const x2 = d.x - Math.sin(d.angle) * d.length;
+          const y2 = d.y + Math.cos(d.angle) * d.length;
           ctx.moveTo(d.x, d.y);
-          ctx.lineTo(d.x - Math.sin(d.angle) * d.length, d.y + Math.cos(d.angle) * d.length);
-          ctx.stroke();
+          ctx.lineTo(x2, y2);
 
-          // Move
+          // Update position
           d.x -= Math.sin(d.angle) * d.speed;
           d.y += Math.cos(d.angle) * d.speed;
 
-          // Hit bottom or create occasional ground splash
           if (d.y > height) {
             d.y = -d.length;
             d.x = Math.random() * (width + 200);
 
-            // Chance to create a ripple splash
-            if (splashes.length < 35 && Math.random() > 0.4) {
+            if (splashes.length < 20 && Math.random() > 0.6) {
               splashes.push({
                 x: d.x,
-                y: Math.random() * height * 0.7 + height * 0.3,
+                y: Math.random() * (height * 0.6) + height * 0.4,
                 radius: 1,
-                maxRadius: Math.random() * 8 + 4,
-                opacity: 0.5
+                opacity: 0.4
               });
             }
           }
         }
+        ctx.stroke();
 
-        // Render Splashes
-        for (let j = splashes.length - 1; j >= 0; j--) {
-          const s = splashes[j];
-          ctx.strokeStyle = `rgba(224, 242, 254, ${s.opacity})`;
+        // Batched Ground Ripple Splashes
+        if (splashes.length > 0) {
           ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.ellipse(s.x, s.y, s.radius * 2, s.radius * 0.7, 0, 0, Math.PI * 2);
-          ctx.stroke();
+          for (let j = splashes.length - 1; j >= 0; j--) {
+            const s = splashes[j];
+            ctx.strokeStyle = `rgba(224, 242, 254, ${s.opacity})`;
+            ctx.beginPath();
+            ctx.ellipse(s.x, s.y, s.radius * 2, s.radius * 0.6, 0, 0, Math.PI * 2);
+            ctx.stroke();
 
-          s.radius += 0.45;
-          s.opacity -= 0.035;
+            s.radius += 0.5;
+            s.opacity -= 0.04;
 
-          if (s.opacity <= 0) {
-            splashes.splice(j, 1);
+            if (s.opacity <= 0) {
+              splashes.splice(j, 1);
+            }
           }
         }
       }
 
-      // 2. Render Snow
+      // 2. Batched Snow
       else if (activeWeather === 'snow') {
         for (let i = 0; i < snowflakes.length; i++) {
           const s = snowflakes[i];
           s.y += s.speed;
-          s.x += Math.sin(time + s.phase) * s.sway * 0.6;
+          s.x += Math.sin(time + s.phase) * s.sway * 0.5;
 
           if (s.y > height) {
             s.y = -5;
@@ -192,20 +208,18 @@ export function WeatherCanvasOverlay({
         }
       }
 
-      // 3. Render Fog
+      // 3. Fog Layer
       else if (activeWeather === 'fog') {
         const gradient = ctx.createLinearGradient(0, 0, width, height);
-        gradient.addColorStop(0, 'rgba(203, 213, 225, 0.12)');
-        gradient.addColorStop(0.5, 'rgba(148, 163, 184, 0.22)');
-        gradient.addColorStop(1, 'rgba(203, 213, 225, 0.12)');
+        gradient.addColorStop(0, 'rgba(203, 213, 225, 0.10)');
+        gradient.addColorStop(0.5, 'rgba(148, 163, 184, 0.18)');
+        gradient.addColorStop(1, 'rgba(203, 213, 225, 0.10)');
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, width, height);
       }
-
-      animationFrameId = requestAnimationFrame(render);
     };
 
-    render();
+    animationFrameId = requestAnimationFrame(render);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
@@ -221,12 +235,14 @@ export function WeatherCanvasOverlay({
       <canvas
         ref={canvasRef}
         className="absolute inset-0 pointer-events-none z-10 w-full h-full"
+        style={{ willChange: 'transform' }}
       />
 
-      {/* Atmospheric Lightning Screen Flash */}
-      {lightningFlash && (
-        <div className="absolute inset-0 z-15 pointer-events-none bg-blue-100/25 dark:bg-white/30 backdrop-brightness-125 transition-opacity" />
-      )}
+      {/* Atmospheric Lightning Screen Flash (Direct DOM Animated) */}
+      <div
+        ref={lightningOverlayRef}
+        className="absolute inset-0 z-15 pointer-events-none bg-blue-100/25 dark:bg-white/30 backdrop-brightness-125 transition-opacity duration-75 opacity-0"
+      />
 
       {/* Wet Road Gloss Vignette when Raining */}
       {(activeWeather === 'rain' || activeWeather === 'storm') && (

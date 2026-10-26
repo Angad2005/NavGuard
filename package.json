@@ -9,15 +9,17 @@
     "dev": "nodemon backend/src/server.js",
     "dev:frontend": "vite",
     "build": "vite build",
-    "test": "node --test"
+    "test": "node --test backend/test/*.test.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
+    "dotenv": "^18.0.9",
     "express": "^4.21.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.61.0",
+    "mongoose": "^9.11.4",
     "multer": "^2.5.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

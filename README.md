@@ -79,13 +79,13 @@ npm run dev:frontend
 
 The backend currently uses in-memory storage so it is easy to run locally. Data is reset whenever the server restarts.
 
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `GET` | `/api/health` | Returns service status and timestamp |
-| `GET` | `/api/hazards` | Lists active and scheduled road hazards |
-| `POST` | `/api/hazards` | Creates a hazard, optionally with `coordinates: { lat, lng }` and an image (JPEG, PNG, WebP, GIF up to 5 MB) |
-| `DELETE` | `/api/hazards/:id` | Removes or resolves a hazard by ID |
-| `POST` | `/api/route` | Calculates hazard-free routes with Dijkstra over live OpenStreetMap road data |
+| Method     | Endpoint             | Description                                                                                                    |
+| ---------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/health`      | Returns service status and timestamp                                                                           |
+| `GET`    | `/api/hazards`     | Lists active and scheduled road hazards                                                                        |
+| `POST`   | `/api/hazards`     | Creates a hazard, optionally with `coordinates: { lat, lng }` and an image (JPEG, PNG, WebP, GIF up to 5 MB) |
+| `DELETE` | `/api/hazards/:id` | Removes or resolves a hazard by ID                                                                             |
+| `POST`   | `/api/route`       | Calculates hazard-free routes with Dijkstra over live OpenStreetMap road data                                  |
 
 Example hazard creation request (`POST /api/hazards`):
 

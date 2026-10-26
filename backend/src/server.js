@@ -1,6 +1,9 @@
 'use strict';
 
+require('dotenv').config();
+
 const express = require('express');
+const mongoose = require('mongoose');
 const fs = require('fs');
 const multer = require('multer');
 const path = require('path');
@@ -8,6 +11,8 @@ const sharp = require('sharp');
 const { randomUUID } = require('crypto');
 const { calculateDijkstraRoutes } = require('./dijkstra-router');
 const { generateNavAIResponse } = require('./navai-engine');
+const { connectDatabase } = require('./database');
+const Hazard = require('./models/Hazard');
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT, 10) || 3000;
@@ -148,15 +153,31 @@ function combineRoutingHazards(requestedHazards) {
 }
 
 app.get('/api/health', (_req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const dbStatusMap = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
   res.json({
     status: 'ok',
     service: 'naviguard-api',
+    database: {
+      type: 'mongodb',
+      status: dbStatusMap[dbState] || 'unknown',
+      connected: dbState === 1
+    },
     timestamp: new Date().toISOString()
   });
 });
 
-app.get('/api/hazards', (_req, res) => {
-  res.json({ data: hazards });
+app.get('/api/hazards', async (_req, res, next) => {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const dbHazards = await Hazard.find().lean();
+      hazards.splice(0, hazards.length, ...dbHazards);
+      return res.json({ data: dbHazards });
+    }
+    return res.json({ data: hazards });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.post('/api/route', async (req, res, next) => {
@@ -270,6 +291,9 @@ app.post('/api/hazards', upload.single('image'), async (req, res, next) => {
       createdAt: new Date().toISOString()
     };
 
+    if (mongoose.connection.readyState === 1) {
+      await Hazard.create(hazard);
+    }
     hazards.push(hazard);
     return res.status(201).json({ data: hazard });
   } catch (error) {
@@ -292,6 +316,9 @@ app.delete('/api/hazards/:id', async (req, res, next) => {
     }
   }
 
+  if (mongoose.connection.readyState === 1) {
+    await Hazard.deleteOne({ id: req.params.id });
+  }
   const [removed] = hazards.splice(index, 1);
   return res.json({ data: removed });
 });
@@ -370,6 +397,20 @@ app.use((error, _req, res, _next) => {
 });
 
 if (require.main === module) {
+  connectDatabase().then(async () => {
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const docs = await Hazard.find().lean();
+        hazards.splice(0, hazards.length, ...docs);
+        console.log(`[NaviGuard] Synced ${docs.length} hazards from MongoDB`);
+      } catch (err) {
+        console.warn('[NaviGuard] Hazard sync warning:', err.message);
+      }
+    }
+  }).catch((err) => {
+    console.warn('[NaviGuard] Database connection deferred:', err.message);
+  });
+
   app.listen(PORT, () => {
     console.log(`NaviGuard server running at http://localhost:${PORT}`);
   });
@@ -377,3 +418,5 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.hazards = hazards;
+module.exports.Hazard = Hazard;
+module.exports.connectDatabase = connectDatabase;

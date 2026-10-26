@@ -165,6 +165,65 @@ function createVehicleMarker() {
   });
 }
 
+// Isolated Telemetry Capsule (Memoized to prevent MapView re-renders on clock ticks or map movement)
+const TelemetryCapsule = React.memo(function TelemetryCapsule({ mapInstanceRef }) {
+  const [currentTime, setCurrentTime] = useState(() =>
+    new Date().toLocaleTimeString([], { hour12: false })
+  );
+  const [compassAngle, setCompassAngle] = useState(352);
+
+  useEffect(() => {
+    const updateTime = () => {
+      setCurrentTime(new Date().toLocaleTimeString([], { hour12: false }));
+    };
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const map = mapInstanceRef?.current;
+    if (!map) return;
+
+    let ticking = false;
+    let rAfId = null;
+
+    const handleMove = () => {
+      if (!ticking) {
+        ticking = true;
+        rAfId = requestAnimationFrame(() => {
+          setCompassAngle((prev) => (prev + 0.3) % 360);
+          ticking = false;
+        });
+      }
+    };
+
+    map.on('move', handleMove);
+    return () => {
+      map.off('move', handleMove);
+      if (rAfId) cancelAnimationFrame(rAfId);
+    };
+  }, [mapInstanceRef]);
+
+  return (
+    <div className="hidden sm:flex items-center gap-3 px-3.5 py-2 rounded-2xl cyber-glass text-xs font-bold text-slate-300 shadow-xl">
+      <div className="flex items-center gap-1.5">
+        <Clock className="w-3.5 h-3.5 text-blue-400" />
+        <span className="font-mono">{currentTime}</span>
+      </div>
+
+      <span className="text-slate-600">•</span>
+
+      <div className="flex items-center gap-1.5">
+        <Compass
+          className="w-4 h-4 text-cyan-400 transition-transform duration-300"
+          style={{ transform: `rotate(${compassAngle}deg)` }}
+        />
+        <span className="font-mono">{Math.round(compassAngle)}° N</span>
+      </div>
+    </div>
+  );
+});
+
 export function MapView({
   startCoords,
   setStartCoords,
@@ -206,20 +265,6 @@ export function MapView({
   const [simulatedSpeed, setSimulatedSpeed] = useState(48);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
 
-  // Live Precision Clock & Compass Heading
-  const [currentTime, setCurrentTime] = useState('');
-  const [compassAngle, setCompassAngle] = useState(352);
-
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(now.toLocaleTimeString([], { hour12: false }));
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   // Voice Guidance (Text-To-Speech)
   const speakGuidance = useCallback((text) => {
     if (!voiceEnabled || !window.speechSynthesis) return;
@@ -250,10 +295,6 @@ export function MapView({
     }).addTo(map);
 
     activeTileLayerRef.current = tileLayer;
-
-    map.on('move', () => {
-      setCompassAngle((prev) => (prev + 0.3) % 360);
-    });
 
     mapInstanceRef.current = map;
 
@@ -742,23 +783,8 @@ export function MapView({
           <span className="px-1.5 py-0.2 rounded text-[8px] bg-cyan-500/20 text-cyan-300 font-mono">COPILOT</span>
         </button>
 
-        {/* Telemetry Capsule: Time, Bearing */}
-        <div className="hidden sm:flex items-center gap-3 px-3.5 py-2 rounded-2xl cyber-glass text-xs font-bold text-slate-300 shadow-xl">
-          <div className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-blue-400" />
-            <span className="font-mono">{currentTime}</span>
-          </div>
-
-          <span className="text-slate-600">•</span>
-
-          <div className="flex items-center gap-1.5">
-            <Compass
-              className="w-4 h-4 text-cyan-400 transition-transform duration-300"
-              style={{ transform: `rotate(${compassAngle}deg)` }}
-            />
-            <span className="font-mono">{Math.round(compassAngle)}° N</span>
-          </div>
-        </div>
+        {/* Telemetry Capsule: Time, Bearing (Isolated Subcomponent) */}
+        <TelemetryCapsule mapInstanceRef={mapInstanceRef} />
 
 
 

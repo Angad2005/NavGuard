@@ -29,13 +29,10 @@ body {
   z-index: 5;
 }
 
-/* Neon Glow Polyline Filters */
-.leaflet-route-glow {
-  filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.95)) drop-shadow(0 0 24px rgba(37, 99, 235, 0.6));
-}
-
+/* Route Polyline Styling (Hardware Accelerated) */
+.leaflet-route-glow,
 .leaflet-route-detour-glow {
-  filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.95)) drop-shadow(0 0 24px rgba(5, 150, 105, 0.6));
+  will-change: stroke-dashoffset;
 }
 
 /* Animated Route Dash Flow */
@@ -46,16 +43,17 @@ body {
 
 .route-animated-flow {
   animation: route-dash-flow 1.2s linear infinite;
+  will-change: stroke-dashoffset;
 }
 
 /* Radar pulse animation for hazard markers */
 @keyframes radar-ripple {
   0% {
-    transform: scale(0.6);
+    transform: scale(0.6) translateZ(0);
     opacity: 0.9;
   }
   100% {
-    transform: scale(3);
+    transform: scale(3) translateZ(0);
     opacity: 0;
   }
 }
@@ -66,22 +64,26 @@ body {
   border-radius: 50%;
   animation: radar-ripple 2.4s cubic-bezier(0.2, 0.7, 0.4, 1) infinite;
   pointer-events: none;
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 /* Vehicle Pulse */
 @keyframes vehicle-ping {
   0% {
-    transform: scale(0.8);
+    transform: scale(0.8) translateZ(0);
     opacity: 0.9;
   }
   75%, 100% {
-    transform: scale(2.4);
+    transform: scale(2.4) translateZ(0);
     opacity: 0;
   }
 }
 
 .vehicle-ping-ring {
   animation: vehicle-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 /* Glass Windshield Droplets Effect */
@@ -181,17 +183,21 @@ body {
   animation: shimmer-sweep 1.8s infinite;
 }
 
-/* Glow Border Helpers */
+/* Glow Border Helpers - Performance Optimized */
 .cyber-glass {
-  background: rgba(11, 17, 32, 0.85);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(11, 17, 32, 0.90);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.7);
+  contain: paint;
 }
 
 .light .cyber-glass {
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(226, 232, 240, 0.9);
   box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.12);
+  contain: paint;
 }

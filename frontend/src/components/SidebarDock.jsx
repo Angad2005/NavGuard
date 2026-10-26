@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Navigation,
   AlertTriangle,
@@ -119,15 +119,19 @@ export function SidebarDock({
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [copiedGps, setCopiedGps] = useState(false);
 
-  // Filter hazards
-  const filteredHazards = hazards.filter((h) => {
-    const matchesCat = hazardCategory === 'All' || h.category === hazardCategory;
-    const matchesQuery =
-      !hazardSearch ||
-      h.title?.toLowerCase().includes(hazardSearch.toLowerCase()) ||
-      h.location?.toLowerCase().includes(hazardSearch.toLowerCase());
-    return matchesCat && matchesQuery;
-  });
+  // Memoized Filtered Hazards (Prevents continuous recalculations on render)
+  const filteredHazards = useMemo(() => {
+    const q = hazardSearch.trim().toLowerCase();
+    return hazards.filter((h) => {
+      const matchesCat = hazardCategory === 'All' || h.category === hazardCategory;
+      if (!matchesCat) return false;
+      if (!q) return true;
+      return (
+        h.title?.toLowerCase().includes(q) ||
+        h.location?.toLowerCase().includes(q)
+      );
+    });
+  }, [hazards, hazardCategory, hazardSearch]);
 
   const handleDeleteHazard = async (id, title) => {
     if (!window.confirm(`Mark obstacle "${title}" as cleared?`)) return;
