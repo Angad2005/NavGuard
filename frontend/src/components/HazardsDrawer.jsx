@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useHazards } from '../context/HazardContext';
+import { ProtectedHazardImage } from './ProtectedHazardImage';
 import { getHazardStatus, formatDuration, getHazardColor } from '../utils/geo';
 import {
   X,
@@ -66,10 +67,10 @@ export function HazardsDrawer({ isOpen, onClose, onFocusHazard, onToast }) {
             </div>
             <div>
               <h3 className="font-extrabold text-base text-slate-900 dark:text-slate-100">
-                Community Hazards
+                Your Hazards
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Real-time incident intelligence & road alerts
+                Your saved incident reports and road alerts
               </p>
             </div>
           </div>
@@ -195,7 +196,7 @@ export function HazardsDrawer({ isOpen, onClose, onFocusHazard, onToast }) {
                         onClick={() => setSelectedPhoto(hazard.imageUrl)}
                         className="w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 relative group/img cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all shadow-xs"
                       >
-                        <img
+                        <ProtectedHazardImage
                           src={hazard.imageUrl}
                           alt={hazard.title}
                           className="w-full h-full object-cover group-hover/img:scale-105 transition-transform"
@@ -204,7 +205,7 @@ export function HazardsDrawer({ isOpen, onClose, onFocusHazard, onToast }) {
                     )}
                   </div>
 
-                  {/* Community Verification & Action */}
+                  {/* Your report status and actions */}
                   <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 text-xs">
                     <button
                       type="button"
@@ -267,7 +268,7 @@ export function HazardsDrawer({ isOpen, onClose, onFocusHazard, onToast }) {
               >
                 <X className="w-5 h-5" />
               </button>
-              <img
+              <ProtectedHazardImage
                 src={selectedPhoto}
                 alt="Hazard photograph"
                 className="w-full h-auto max-h-[80vh] object-contain"

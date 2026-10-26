@@ -1,6 +1,13 @@
+<<<<<<< HEAD
 import React, { useState, useMemo } from 'react';
+=======
+import React, { useRef, useState } from 'react';
+>>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
 import {
   Navigation,
+  Plus,
+  Save,
+  ImagePlus,
   AlertTriangle,
   CloudRain,
   ShieldAlert,
@@ -24,7 +31,6 @@ import {
   Hospital,
   Shield,
   Flame,
-  Fuel,
   Volume2,
   VolumeX,
   Sparkles,
@@ -37,6 +43,7 @@ import {
   Bot
 } from 'lucide-react';
 import { useHazards } from '../context/HazardContext';
+import { ProtectedHazardImage } from './ProtectedHazardImage';
 import {
   formatDuration,
   formatDistance,
@@ -47,21 +54,12 @@ import {
 import { playSound } from '../utils/audio';
 import { SidebarNavAIPanel } from './SidebarNavAIPanel';
 
-const PRESET_DESTINATIONS = [
-  { label: 'Airport', query: 'Airport', icon: '✈️' },
-  { label: 'City Center', query: 'City Center', icon: '🏛️' },
-  { label: 'Central Station', query: 'Railway Station', icon: '🚆' },
-  { label: 'Hospital', query: 'Hospital', icon: '🏥' },
-  { label: 'Downtown Mall', query: 'Shopping Mall', icon: '🛍️' }
-];
-
 const HAZARD_CATEGORIES = ['All', 'Flooding', 'Road Damage', 'Debris', 'Accident', 'Construction', 'Other'];
 
 const SAFE_HAVEN_TYPES = [
-  { id: 'hospital', label: 'Hospitals / ER', icon: Hospital, amenity: 'hospital' },
-  { id: 'police', label: 'Police Stations', icon: Shield, amenity: 'police' },
-  { id: 'fire', label: 'Fire Stations', icon: Flame, amenity: 'fire_station' },
-  { id: 'fuel', label: 'Gas Stations', icon: Fuel, amenity: 'fuel' }
+  { id: 'hospital', label: 'Hospitals / ER', icon: Hospital },
+  { id: 'police', label: 'Police Stations', icon: Shield },
+  { id: 'fire', label: 'Fire Stations', icon: Flame }
 ];
 
 export function SidebarDock({
@@ -75,13 +73,15 @@ export function SidebarDock({
   endQuery,
   setEndQuery,
   startCoords,
+  setStartCoords,
   endCoords,
+  setEndCoords,
+  routeWaypoints,
+  onRemoveWaypoint,
   onUseGps,
   locatingGps,
   onSwap,
-  onSelectPreset,
   startSuggestions,
-  endSuggestions,
   onSelectSuggestion,
   onResolveRoute,
   routing,
@@ -90,6 +90,15 @@ export function SidebarDock({
   selectedRouteIndex,
   setSelectedRouteIndex,
   onClearRoute,
+  savedPlaces,
+  savedRoutes,
+  onSaveLocation,
+  onAddWaypoint,
+  onSelectSavedPlace,
+  onDeleteSavedPlace,
+  onSaveRoute,
+  onLoadSavedRoute,
+  onDeleteSavedRoute,
   onStartNavigation,
   onOpenSafetyAudit,
   // Hazard Feed props
@@ -107,6 +116,7 @@ export function SidebarDock({
   userCoords,
   emergencyPlaces,
   emergencyLoading,
+  emergencyError,
   selectedHavenType,
   setSelectedHavenType,
   onSelectEmergencyDestination,
@@ -118,6 +128,8 @@ export function SidebarDock({
   const [hazardCategory, setHazardCategory] = useState('All');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [copiedGps, setCopiedGps] = useState(false);
+  const originImageRef = useRef(null);
+  const destinationImageRef = useRef(null);
 
   // Memoized Filtered Hazards (Prevents continuous recalculations on render)
   const filteredHazards = useMemo(() => {
@@ -170,6 +182,7 @@ export function SidebarDock({
               <div className="flex items-center gap-1 flex-1 overflow-x-auto no-scrollbar">
                 {[
                   { id: 'routes', label: 'Route', icon: Navigation },
+                  { id: 'places', label: 'Places', icon: MapPin, badge: savedPlaces.length },
                   { id: 'navai', label: 'NavAI', icon: Bot, badge: 'AI' },
                   { id: 'hazards', label: 'Radar', icon: AlertTriangle, badge: stats.active },
                   { id: 'weather', label: 'Atmosphere', icon: CloudRain },
@@ -206,6 +219,7 @@ export function SidebarDock({
               <div className="flex flex-col items-center gap-3 py-2 w-full">
                 {[
                   { id: 'routes', icon: Navigation },
+                  { id: 'places', icon: MapPin, badge: savedPlaces.length },
                   { id: 'navai', icon: Bot, badge: 'AI' },
                   { id: 'hazards', icon: AlertTriangle, badge: stats.active },
                   { id: 'weather', icon: CloudRain },
@@ -273,7 +287,10 @@ export function SidebarDock({
                         <input
                           type="text"
                           value={startQuery}
-                          onChange={(e) => setStartQuery(e.target.value)}
+                          onChange={(e) => {
+                            setStartQuery(e.target.value);
+                            setStartCoords(null);
+                          }}
                           placeholder="Origin: address, landmark or map click..."
                           className="w-full pl-9 pr-9 py-2.5 text-xs font-semibold rounded-2xl border border-white/10 bg-black/20 dark:bg-slate-900/40 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/80 transition-all shadow-inner"
                         />
@@ -299,7 +316,7 @@ export function SidebarDock({
                             <button
                               key={i}
                               type="button"
-                              onClick={() => onSelectSuggestion('start', sug)}
+                              onClick={() => onSelectSuggestion(sug)}
                               className="w-full text-left px-3 py-2.5 hover:bg-slate-800 flex items-center gap-2 border-b border-slate-800 last:border-0"
                             >
                               <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -331,14 +348,20 @@ export function SidebarDock({
                         <input
                           type="text"
                           value={endQuery}
-                          onChange={(e) => setEndQuery(e.target.value)}
+                          onChange={(e) => {
+                            setEndQuery(e.target.value);
+                            setEndCoords(null);
+                          }}
                           placeholder="Destination: enter place..."
                           className="w-full pl-9 pr-8 py-2.5 text-xs font-semibold rounded-2xl border border-white/10 bg-black/20 dark:bg-slate-900/40 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/80 transition-all shadow-inner"
                         />
                         {endQuery && (
                           <button
                             type="button"
-                            onClick={() => setEndQuery('')}
+                            onClick={() => {
+                              setEndQuery('');
+                              setEndCoords(null);
+                            }}
                             className="absolute right-2.5 text-slate-400 hover:text-slate-200"
                           >
                             <X className="w-4 h-4" />
@@ -346,37 +369,6 @@ export function SidebarDock({
                         )}
                       </div>
 
-                      {/* Destination Suggestions Dropdown */}
-                      {endSuggestions.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 z-30 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden text-xs">
-                          {endSuggestions.map((sug, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => onSelectSuggestion('end', sug)}
-                              className="w-full text-left px-3 py-2.5 hover:bg-slate-800 flex items-center gap-2 border-b border-slate-800 last:border-0"
-                            >
-                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="truncate">{sug.display_name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quick Preset Destination Chips */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] no-scrollbar">
-                      {PRESET_DESTINATIONS.map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => onSelectPreset(preset)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 text-slate-300 hover:text-blue-400 transition-all shrink-0 font-medium"
-                        >
-                          <span>{preset.icon}</span>
-                          <span>{preset.label}</span>
-                        </button>
-                      ))}
                     </div>
 
                     {/* Compute Route Button */}
@@ -414,6 +406,160 @@ export function SidebarDock({
                     </div>
                   </form>
 
+                  <section className="space-y-2.5 border-t border-white/10 pt-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400">Saved places</h4>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          disabled={!startCoords}
+                          onClick={() => onSaveLocation(startQuery || 'Origin', startCoords)}
+                          className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-slate-300 hover:bg-white/10 disabled:opacity-40"
+                        >
+                          Save origin
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!startCoords}
+                          onClick={() => originImageRef.current?.click()}
+                          className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-amber-300 hover:bg-white/10 disabled:opacity-40"
+                          title="Save origin with an image"
+                        >
+                          <ImagePlus className="h-3 w-3" />
+                          Photo
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!endCoords}
+                          onClick={() => onSaveLocation(endQuery || 'Destination', endCoords)}
+                          className="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-slate-300 hover:bg-white/10 disabled:opacity-40"
+                        >
+                          Save destination
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!endCoords}
+                          onClick={() => destinationImageRef.current?.click()}
+                          className="inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-amber-300 hover:bg-white/10 disabled:opacity-40"
+                          title="Save destination with an image"
+                        >
+                          <ImagePlus className="h-3 w-3" />
+                          Photo
+                        </button>
+                      </div>
+                    </div>
+                    <input
+                      ref={originImageRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) onSaveLocation(startQuery || 'Origin', startCoords, file);
+                        event.target.value = '';
+                      }}
+                    />
+                    <input
+                      ref={destinationImageRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) onSaveLocation(endQuery || 'Destination', endCoords, file);
+                        event.target.value = '';
+                      }}
+                    />
+
+                    {routeWaypoints.length > 0 && (
+                      <div className="space-y-1 rounded-xl border border-amber-500/20 bg-amber-500/5 p-2">
+                        <p className="text-[10px] font-bold text-amber-300">Route stops (in order)</p>
+                        {routeWaypoints.map((waypoint, index) => (
+                          <div key={waypoint.id} className="flex items-center justify-between gap-2 text-[11px] text-slate-200">
+                            <span className="truncate">{index + 1}. {waypoint.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => onRemoveWaypoint(waypoint.id)}
+                              className="shrink-0 rounded p-1 text-slate-400 hover:text-rose-400"
+                              title={`Remove ${waypoint.name} from route`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {savedPlaces.length === 0 ? (
+                      <p className="text-[11px] text-slate-500">Save an origin or destination to build a route with stops.</p>
+                    ) : (
+                      <div className="max-h-36 space-y-1.5 overflow-y-auto pr-1">
+                        {savedPlaces.map((place) => (
+                          <div key={place.id} className="flex items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.03] px-2 py-1.5">
+                            {place.imageUrl ? (
+                              <ProtectedHazardImage src={place.imageUrl} alt="" className="h-7 w-7 shrink-0 rounded-md object-cover" />
+                            ) : (
+                              <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                            )}
+                            <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-200">{place.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => onSelectSavedPlace(place)}
+                              className="rounded-md px-1.5 py-1 text-[9px] font-bold text-blue-300 hover:bg-blue-500/10"
+                              title="Use as destination"
+                            >
+                              End
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onAddWaypoint(place)}
+                              className="rounded-md p-1 text-amber-300 hover:bg-amber-500/10"
+                              title="Add as a route stop"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteSavedPlace(place.id)}
+                              className="rounded-md p-1 text-slate-500 hover:text-rose-400"
+                              title="Delete saved place"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {savedRoutes.length > 0 && (
+                    <section className="space-y-2 border-t border-white/10 pt-3">
+                      <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400">Saved routes</h4>
+                      <div className="max-h-32 space-y-1.5 overflow-y-auto pr-1">
+                        {savedRoutes.map((route) => (
+                          <div key={route.id} className="flex items-center gap-1.5 rounded-xl border border-white/5 bg-white/[0.03] px-2 py-1.5">
+                            <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-slate-200">{route.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => onLoadSavedRoute(route)}
+                              className="rounded-md px-1.5 py-1 text-[9px] font-bold text-emerald-300 hover:bg-emerald-500/10"
+                            >
+                              Load
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteSavedRoute(route.id)}
+                              className="rounded-md p-1 text-slate-500 hover:text-rose-400"
+                              title="Delete saved route"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
                   {/* Routing Error Notice */}
                   {routingError && (
                     <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
@@ -430,6 +576,17 @@ export function SidebarDock({
                           Route Options ({routeResults.length})
                         </span>
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={onSaveRoute}
+                            disabled={!startCoords || !endCoords}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 hover:underline disabled:opacity-40"
+                            title="Save this route on this device"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            <span>Save</span>
+                          </button>
+                          <span className="text-slate-600">•</span>
                           <button
                             type="button"
                             onClick={() => onOpenSafetyAudit(activeRoute, startQuery, endQuery)}
@@ -520,6 +677,104 @@ export function SidebarDock({
                         );
                       })}
                     </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'places' && (
+                <div className="space-y-3.5 animate-in fade-in duration-200">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-100">Saved places</h3>
+                    <p className="mt-1 text-[11px] text-slate-400">Your saved origins and destinations, with photos.</p>
+                  </div>
+                  {savedPlaces.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-10 text-center text-xs text-slate-400">
+                      <MapPin className="mx-auto mb-2 h-7 w-7 text-slate-500" />
+                      No saved places yet. Save an origin or destination from the Route tab.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {savedPlaces.map((place) => (
+                        <article key={place.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04]">
+                          {place.imageUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPhoto(place.imageUrl)}
+                              className="block h-36 w-full overflow-hidden bg-black/20"
+                              title={`View photo for ${place.name}`}
+                            >
+                              <ProtectedHazardImage
+                                src={place.imageUrl}
+                                alt={`${place.name} location`}
+                                className="h-full w-full object-cover transition-transform hover:scale-[1.02]"
+                              />
+                            </button>
+                          ) : (
+                            <div className="flex h-24 items-center justify-center bg-white/[0.03] text-slate-500">
+                              <MapPin className="h-8 w-8" />
+                            </div>
+                          )}
+                          <div className="space-y-2.5 p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <h4 className="truncate text-xs font-extrabold text-slate-100">{place.name}</h4>
+                                <p className="mt-1 font-mono text-[10px] text-slate-500">
+                                  {place.coordinates.lat.toFixed(5)}, {place.coordinates.lng.toFixed(5)}
+                                </p>
+                              </div>
+                              {place.imageUrl && (
+                                <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-1 text-[9px] font-bold text-emerald-300">
+                                  Photo
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => onSelectSavedPlace(place)}
+                                className="flex-1 rounded-xl bg-blue-600/20 px-2 py-2 text-[10px] font-bold text-blue-200 hover:bg-blue-600/30"
+                              >
+                                Use as destination
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onAddWaypoint(place)}
+                                className="rounded-xl border border-amber-500/20 p-2 text-amber-300 hover:bg-amber-500/10"
+                                title="Add as a route stop"
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteSavedPlace(place.id)}
+                                className="rounded-xl border border-white/10 p-2 text-slate-400 hover:text-rose-400"
+                                title="Delete saved place"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                  {savedRoutes.length > 0 && (
+                    <section className="space-y-2 border-t border-white/10 pt-3">
+                      <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400">Saved routes</h4>
+                      {savedRoutes.map((route) => (
+                        <div key={route.id} className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.03] px-2.5 py-2">
+                          <RouteIcon className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{route.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => onLoadSavedRoute(route)}
+                            className="text-[10px] font-bold text-emerald-300 hover:underline"
+                          >
+                            Load
+                          </button>
+                        </div>
+                      ))}
+                    </section>
                   )}
                 </div>
               )}
@@ -633,12 +888,12 @@ export function SidebarDock({
                                   onClick={() => setSelectedPhoto(h.imageUrl)}
                                   className="w-14 h-14 rounded-xl overflow-hidden border border-white/15 shrink-0 hover:ring-2 hover:ring-blue-500 transition-all"
                                 >
-                                  <img src={h.imageUrl} alt={h.title} className="w-full h-full object-cover" />
+                                  <ProtectedHazardImage src={h.imageUrl} alt={h.title} className="w-full h-full object-cover" />
                                 </button>
                               )}
                             </div>
 
-                            {/* Community Verification & Action Row */}
+                            {/* Personal hazard report actions */}
                             <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[11px]">
                               <button
                                 type="button"
@@ -838,7 +1093,7 @@ export function SidebarDock({
                   )}
 
                   {/* Safe Haven Filter Selector */}
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-3 gap-1.5">
                     {SAFE_HAVEN_TYPES.map((t) => {
                       const Icon = t.icon;
                       const isSel = selectedHavenType === t.id;
@@ -870,9 +1125,22 @@ export function SidebarDock({
                         <Loader2 className="w-6 h-6 animate-spin text-rose-500" />
                         <span>Locating nearest emergency facilities...</span>
                       </div>
+                    ) : !userCoords ? (
+                      <div className="py-8 text-center text-xs text-slate-400">
+                        <p>{emergencyError || 'Your current location is needed to find nearby services.'}</p>
+                        <button
+                          type="button"
+                          onClick={onUseGps}
+                          disabled={locatingGps}
+                          className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-2 font-bold text-white hover:bg-rose-500 disabled:opacity-50"
+                        >
+                          {locatingGps ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LocateFixed className="h-3.5 w-3.5" />}
+                          Use my location
+                        </button>
+                      </div>
                     ) : emergencyPlaces.length === 0 ? (
                       <div className="py-8 text-center text-xs text-slate-400">
-                        No facilities found in immediate radius.
+                        {emergencyError || 'No facilities found within 8 km. Try another service type.'}
                       </div>
                     ) : (
                       emergencyPlaces.map((place) => (
@@ -925,7 +1193,7 @@ export function SidebarDock({
             >
               <X className="w-5 h-5" />
             </button>
-            <img src={selectedPhoto} alt="Hazard photo" className="w-full h-auto max-h-[80vh] object-contain" />
+            <ProtectedHazardImage src={selectedPhoto} alt="Hazard photo" className="w-full h-auto max-h-[80vh] object-contain" />
           </div>
         </div>
       )}

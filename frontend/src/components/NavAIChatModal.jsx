@@ -22,6 +22,7 @@ import {
   Check
 } from 'lucide-react';
 import { playSound, speakNavAI, stopSpeakingNavAI } from '../utils/audio';
+import { apiFetch } from '../utils/api';
 
 const QUICK_PROMPTS = [
   { label: '📋 Departure briefing', query: 'Give me a full departure briefing on this route' },
@@ -71,10 +72,10 @@ export function NavAIChatModal({
         ? `Hello! I am **NavAI**, your real-time route & safety co-pilot.\n\n` +
           `I am actively tracking your corridor from **${startQuery || 'Start'}** to **${endQuery || 'Destination'}** ` +
           `(${distanceKm} km, ~${durationMin} min).\n\n` +
-          `${isDetour ? '✓ **Active Safe Detour Engaged**: Community obstacles have been calculated and circumvented.' : '✓ **Direct Path Verified**: No imminent road obstructions detected.'}\n\n` +
+          `${isDetour ? '✓ **Active Safe Detour Engaged**: Your reported obstacles have been calculated and circumvented.' : '✓ **Direct Path Verified**: No imminent road obstructions detected.'}\n\n` +
           `Tap a quick query below or ask me anything regarding hazards, weather braking multipliers, or emergency havens!`
         : `Hello! I am **NavAI**, your real-time route co-pilot.\n\n` +
-          `I am monitoring ${activeHazardsList.length} live community road obstacles and atmospheric weather.\n\n` +
+          `I am monitoring ${activeHazardsList.length} of your road reports and atmospheric weather.\n\n` +
           `Select an origin and destination on the map, and I will continuously evaluate your corridor safety in real time!`;
 
       setMessages([
@@ -125,7 +126,7 @@ export function NavAIChatModal({
     };
 
     try {
-      const res = await fetch('/api/navai/chat', {
+      const res = await apiFetch('/api/navai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -583,7 +584,7 @@ function generateClientFallback(query, telemetry) {
   }
 
   if (!route) {
-    return 'I am actively monitoring community obstacles and road conditions. Please select an origin and destination on the map to begin corridor tracking!';
+    return 'I am monitoring your saved hazard reports and road conditions. Please select an origin and destination on the map to begin corridor tracking!';
   }
 
   const distKm = (route.distance / 1000).toFixed(1);

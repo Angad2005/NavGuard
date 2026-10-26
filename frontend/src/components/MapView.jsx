@@ -231,6 +231,7 @@ export function MapView({
   endCoords,
   setEndCoords,
   setEndQuery,
+  routeWaypoints = [],
   routeResults,
   selectedRouteIndex,
   setSelectedRouteIndex,
@@ -254,6 +255,7 @@ export function MapView({
   const hazardLayersRef = useRef([]);
   const startMarkerRef = useRef(null);
   const endMarkerRef = useRef(null);
+  const waypointMarkersRef = useRef([]);
   const vehicleMarkerRef = useRef(null);
 
   const selectedLayerKey = 'streets';
@@ -413,6 +415,27 @@ export function MapView({
     }
   }, [startCoords, endCoords]);
 
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    waypointMarkersRef.current.forEach((marker) => marker.remove());
+    waypointMarkersRef.current = routeWaypoints.map((waypoint, index) => {
+      const coordinates = waypoint.coordinates || waypoint;
+      return L.marker([coordinates.lat, coordinates.lng], {
+        icon: createLocationMarker(String(index + 1), '#f59e0b'),
+        zIndexOffset: 500
+      })
+        .addTo(map)
+        .bindPopup(`<b>Route stop ${index + 1}</b><br>${waypoint.name || 'Saved place'}`);
+    });
+
+    return () => {
+      waypointMarkersRef.current.forEach((marker) => marker.remove());
+      waypointMarkersRef.current = [];
+    };
+  }, [routeWaypoints]);
+
   // Render Hazards and Danger Zones
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -447,7 +470,6 @@ export function MapView({
             <span style="background: ${getHazardColor(h.category, h.severity)}22; color: ${getHazardColor(h.category, h.severity)}; padding: 2px 6px; border-radius: 6px; font-weight: 700; font-size: 10px;">${h.severity}</span>
           </div>
           <div style="color: #64748b; font-size: 11px; margin-bottom: 6px;">${h.category} • ${h.location}</div>
-          ${h.imageUrl ? `<img src="${h.imageUrl}" style="width: 100%; height: 110px; object-fit: cover; border-radius: 10px; margin-bottom: 6px;" />` : ''}
           ${h.description ? `<p style="color: #475569; font-size: 11px; line-height: 1.4; margin-bottom: 6px;">${h.description}</p>` : ''}
           <div style="font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 4px;">Obstacle (${h.confirmations || 1} verified)</div>
         </div>

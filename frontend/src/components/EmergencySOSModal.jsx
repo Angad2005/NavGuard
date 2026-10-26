@@ -6,7 +6,6 @@ import {
   Hospital,
   Shield,
   Flame,
-  Fuel,
   Navigation,
   Loader2,
   Copy,
@@ -19,8 +18,7 @@ import { formatDistance, distanceBetweenPointsMeters } from '../utils/geo';
 const SAFE_HAVEN_TYPES = [
   { id: 'hospital', label: 'Hospitals / ER', icon: Hospital, amenity: 'hospital', color: 'text-rose-500 bg-rose-500/10' },
   { id: 'police', label: 'Police Stations', icon: Shield, amenity: 'police', color: 'text-blue-500 bg-blue-500/10' },
-  { id: 'fire', label: 'Fire Stations', icon: Flame, amenity: 'fire_station', color: 'text-amber-500 bg-amber-500/10' },
-  { id: 'fuel', label: 'Gas Stations', icon: Fuel, amenity: 'fuel', color: 'text-emerald-500 bg-emerald-500/10' }
+  { id: 'fire', label: 'Fire Stations', icon: Flame, amenity: 'fire_station', color: 'text-amber-500 bg-amber-500/10' }
 ];
 
 export function EmergencySOSModal({ isOpen, onClose, userCoords, onSelectEmergencyDestination, onToast }) {
@@ -28,79 +26,73 @@ export function EmergencySOSModal({ isOpen, onClose, userCoords, onSelectEmergen
   const [loading, setLoading] = useState(false);
   const [places, setPlaces] = useState([]);
   const [copiedCoords, setCopiedCoords] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!isOpen || !userCoords) return;
+    if (!isOpen) return;
+    if (!userCoords) {
+      setPlaces([]);
+      setError('Allow location access to find nearby emergency services.');
+      return;
+    }
 
+    const controller = new AbortController();
     const fetchSafeHavens = async () => {
       setLoading(true);
       setPlaces([]);
+      setError('');
       try {
         const typeObj = SAFE_HAVEN_TYPES.find((t) => t.id === selectedType);
         const amenity = typeObj ? typeObj.amenity : 'hospital';
 
-        // Overpass QL query around userCoords within 5000m
         const query = `[out:json][timeout:10];
           (
             node["amenity"="${amenity}"](around:8000,${userCoords.lat},${userCoords.lng});
             way["amenity"="${amenity}"](around:8000,${userCoords.lat},${userCoords.lng});
+            relation["amenity"="${amenity}"](around:8000,${userCoords.lat},${userCoords.lng});
           );
-          out center 8;`;
+          out center;`;
 
         const res = await fetch('https://overpass-api.de/api/interpreter', {
           method: 'POST',
-          body: query
+          body: query,
+          signal: controller.signal
         });
 
         if (!res.ok) throw new Error('Overpass server busy');
         const data = await res.json();
         const results = (data.elements || []).map((el) => {
-          const lat = el.lat || el.center?.lat;
-          const lng = el.lon || el.center?.lon;
+          const lat = Number(el.lat ?? el.center?.lat);
+          const lng = Number(el.lon ?? el.center?.lon);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
           const dist = distanceBetweenPointsMeters(userCoords, { lat, lng });
           return {
             id: el.id,
             name: el.tags?.name || `${typeObj.label.slice(0, -1)} Facility`,
             street: el.tags?.['addr:street'] || el.tags?.address || 'Public Facility',
-            phone: el.tags?.phone || el.tags?.['contact:phone'] || '112',
+            phone: el.tags?.phone || el.tags?.['contact:phone'] || null,
             emergency: el.tags?.emergency === 'yes',
             lat,
             lng,
             distance: dist
           };
-        });
+        }).filter(Boolean);
 
         results.sort((a, b) => a.distance - b.distance);
-        setPlaces(results);
+        if (!controller.signal.aborted) setPlaces(results.slice(0, 8));
       } catch (err) {
-        console.warn('Emergency POI fetch warning:', err);
-        // Fallback simulated places in emergency
-        setPlaces([
-          {
-            id: 1,
-            name: selectedType === 'hospital' ? 'City Emergency Hospital' : 'District Police Station',
-            street: 'Main Emergency Corridor',
-            phone: '112 / 911',
-            lat: userCoords.lat + 0.012,
-            lng: userCoords.lng + 0.008,
-            distance: 1450
-          },
-          {
-            id: 2,
-            name: selectedType === 'hospital' ? 'Metro Trauma Care Center' : 'Civil Safety Station',
-            street: 'Central Avenue',
-            phone: '112',
-            lat: userCoords.lat - 0.015,
-            lng: userCoords.lng + 0.011,
-            distance: 2100
-          }
-        ]);
+        if (!controller.signal.aborted) {
+          console.warn('Emergency POI fetch warning:', err);
+          setPlaces([]);
+          setError(err.message || 'Could not load nearby emergency services.');
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
     fetchSafeHavens();
+    return () => controller.abort();
   }, [isOpen, selectedType, userCoords]);
 
   if (!isOpen) return null;
@@ -178,7 +170,7 @@ export function EmergencySOSModal({ isOpen, onClose, userCoords, onSelectEmergen
         )}
 
         {/* Safe Haven Category Selector */}
-        <div className="grid grid-cols-4 gap-2 mt-4">
+        <div className="grid grid-cols-3 gap-2 mt-4">
           {SAFE_HAVEN_TYPES.map((t) => {
             const Icon = t.icon;
             const selected = selectedType === t.id;
@@ -209,7 +201,7 @@ export function EmergencySOSModal({ isOpen, onClose, userCoords, onSelectEmergen
             </div>
           ) : places.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-500">
-              No emergency facilities found in immediate radius.
+              {error || 'No emergency facilities found within 8 km.'}
             </div>
           ) : (
             places.map((place) => (

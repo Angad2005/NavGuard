@@ -14,6 +14,7 @@ import {
   Compass
 } from 'lucide-react';
 import { playSound, speakNavAI, stopSpeakingNavAI } from '../utils/audio';
+import { apiFetch } from '../utils/api';
 
 const QUICK_PROMPTS = [
   '📋 Departure briefing',
@@ -100,7 +101,7 @@ export function SidebarNavAIPanel({
 
     try {
       const savedKey = typeof localStorage !== 'undefined' ? localStorage.getItem('navai_gemini_key') : null;
-      const res = await fetch('/api/navai/chat', {
+      const res = await apiFetch('/api/navai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

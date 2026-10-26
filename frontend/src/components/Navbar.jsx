@@ -6,12 +6,15 @@ import {
   AlertOctagon,
   CloudRain,
   Activity,
-  Bot
+  Bot,
+  LogOut
 } from 'lucide-react';
 import { playSound } from '../utils/audio';
+import { useAuth } from '../context/AuthContext';
 
 export function Navbar({ onOpenReport, onSelectTab, onOpenNavAI, weatherData }) {
   const { stats } = useHazards();
+  const { user, logout } = useAuth();
 
   return (
     <header className="fixed top-3 left-1/2 -translate-x-1/2 z-30 w-full max-w-4xl px-4 pointer-events-none">
@@ -123,6 +126,16 @@ export function Navbar({ onOpenReport, onSelectTab, onOpenNavAI, weatherData }) 
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Report Hazard</span>
+          </button>
+          <button
+            type="button"
+            onClick={logout}
+            className="inline-flex items-center gap-1.5 rounded-2xl border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-bold text-slate-300 transition hover:bg-rose-500/15 hover:text-rose-300"
+            title={`Sign out${user?.username ? ` (${user.username})` : ''}`}
+            aria-label="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden lg:inline">Sign out</span>
           </button>
         </div>
       </div>
