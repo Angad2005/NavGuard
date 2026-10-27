@@ -5,7 +5,6 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
-const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
 const sharp = require('sharp');
@@ -13,16 +12,11 @@ const bcrypt = require('bcryptjs');
 const { randomUUID } = require('crypto');
 const { calculateDijkstraRoutes } = require('./dijkstra-router');
 const { generateNavAIResponse } = require('./navai-engine');
-<<<<<<< HEAD
-const { connectDatabase } = require('./database');
-const Hazard = require('./models/Hazard');
-=======
 const User = require('./models/User');
 const Hazard = require('./models/Hazard');
 const SavedPlace = require('./models/SavedPlace');
 const { connectDatabase } = require('./database');
 const { createToken, getJwtSecret, requireAuth, serializeUser } = require('./auth');
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
 
 const app = express();
 const PORT = Number.parseInt(process.env.PORT, 10) || 3000;
@@ -162,38 +156,15 @@ function combineRoutingHazards(userHazards) {
 }
 
 app.get('/api/health', (_req, res) => {
-<<<<<<< HEAD
-  const dbState = mongoose.connection.readyState;
-  const dbStatusMap = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
-  res.json({
-    status: 'ok',
-    service: 'naviguard-api',
-    database: {
-      type: 'mongodb',
-      status: dbStatusMap[dbState] || 'unknown',
-      connected: dbState === 1
-    },
-=======
   const connected = mongoose.connection.readyState === 1;
   return res.status(connected ? 200 : 503).json({
     status: connected ? 'ok' : 'unavailable',
     service: 'naviguard-api',
     database: connected ? 'connected' : 'disconnected',
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
     timestamp: new Date().toISOString()
   });
 });
 
-<<<<<<< HEAD
-app.get('/api/hazards', async (_req, res, next) => {
-  try {
-    if (mongoose.connection.readyState === 1) {
-      const dbHazards = await Hazard.find().lean();
-      hazards.splice(0, hazards.length, ...dbHazards);
-      return res.json({ data: dbHazards });
-    }
-    return res.json({ data: hazards });
-=======
 function serializeHazard(hazard) {
   const item = typeof hazard.toObject === 'function' ? hazard.toObject() : hazard;
   return {
@@ -454,7 +425,6 @@ app.delete('/api/places/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'Saved place not found.' });
     }
     return res.json({ data: serializeSavedPlace(place.toObject()) });
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
   } catch (error) {
     return next(error);
   }
@@ -580,13 +550,6 @@ app.post('/api/hazards', upload.single('image'), async (req, res, next) => {
       confirmations: 1
     });
 
-<<<<<<< HEAD
-    if (mongoose.connection.readyState === 1) {
-      await Hazard.create(hazard);
-    }
-    hazards.push(hazard);
-    return res.status(201).json({ data: hazard });
-=======
     return res.status(201).json({ data: serializeHazardDocument(hazard.toObject()) });
   } catch (error) {
     return next(error);
@@ -604,7 +567,6 @@ app.get('/api/hazards/:id/image', async (req, res, next) => {
     }
     res.set('Cache-Control', 'private, no-store');
     return res.type(hazard.imageMimeType).send(hazard.imageData.value());
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
   } catch (error) {
     return next(error);
   }
@@ -623,15 +585,6 @@ app.delete('/api/hazards/:id', async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
-<<<<<<< HEAD
-
-  if (mongoose.connection.readyState === 1) {
-    await Hazard.deleteOne({ id: req.params.id });
-  }
-  const [removed] = hazards.splice(index, 1);
-  return res.json({ data: removed });
-=======
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
 });
 
 
@@ -701,7 +654,7 @@ app.use((error, _req, res, _next) => {
     return res.status(413).json({ error: `Request body is too large. Limit: ${MAX_JSON_BYTES}.` });
   }
 
-  console.error('[NaviGuard API]', error);
+  console.error('[NavGuard API]', error);
   const message = error && typeof error.message === 'string'
     ? error.message
     : 'Internal server error.';
@@ -715,41 +668,32 @@ app.use((error, _req, res, _next) => {
 });
 
 if (require.main === module) {
-<<<<<<< HEAD
-  connectDatabase().then(async () => {
-    if (mongoose.connection.readyState === 1) {
-      try {
-        const docs = await Hazard.find().lean();
-        hazards.splice(0, hazards.length, ...docs);
-        console.log(`[NaviGuard] Synced ${docs.length} hazards from MongoDB`);
-      } catch (err) {
-        console.warn('[NaviGuard] Hazard sync warning:', err.message);
-      }
-    }
-  }).catch((err) => {
-    console.warn('[NaviGuard] Database connection deferred:', err.message);
-  });
-
-  app.listen(PORT, () => {
-    console.log(`NaviGuard server running at http://localhost:${PORT}`);
-=======
   getJwtSecret();
+  let server;
   connectDatabase().then(() => {
-    app.listen(PORT, () => {
-      console.log(`NaviGuard server running at http://localhost:${PORT}`);
+    server = app.listen(PORT, () => {
+      console.log(`NavGuard server running at http://localhost:${PORT}`);
     });
+    const shutdown = (signal) => {
+      console.log(`[NavGuard] ${signal} received; closing server and database connection.`);
+      server.close((error) => {
+        if (error) {
+          console.error('[NavGuard shutdown] Could not close HTTP server:', error);
+          process.exitCode = 1;
+        }
+        mongoose.disconnect().catch((disconnectError) => {
+          console.error('[NavGuard shutdown] Could not close MongoDB connection:', disconnectError);
+          process.exitCode = 1;
+        });
+      });
+    };
+    process.once('SIGINT', () => shutdown('SIGINT'));
+    process.once('SIGTERM', () => shutdown('SIGTERM'));
   }).catch((error) => {
-    console.error('[NaviGuard startup] Could not connect to MongoDB:', error.message);
+    console.error('[NavGuard startup] Could not connect to MongoDB:', error.message);
     process.exitCode = 1;
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
   });
 }
 
 module.exports = app;
-<<<<<<< HEAD
-module.exports.hazards = hazards;
-module.exports.Hazard = Hazard;
-module.exports.connectDatabase = connectDatabase;
-=======
 module.exports.models = { Hazard, SavedPlace, User };
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30

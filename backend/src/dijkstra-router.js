@@ -18,6 +18,10 @@ const OVERPASS_USER_AGENT = process.env.OVERPASS_USER_AGENT || 'NaviGuard/1.0 (O
 const MAX_GRAPH_AREA_DEGREES = Number(process.env.MAX_GRAPH_AREA_DEGREES) || 0.3;
 const MAX_SNAP_DISTANCE_METERS = Number(process.env.MAX_SNAP_DISTANCE_METERS) || 2500;
 const DEFAULT_HAZARD_RADIUS_METERS = 100;
+const OSM_GRAPH_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_CACHED_OSM_GRAPHS = 2;
+const osmGraphCache = new Map();
+const osmGraphLoads = new Map();
 
 const ROAD_TYPES = [
   'motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified',
@@ -243,8 +247,8 @@ async function fetchOverpass(endpoint, query) {
 
 function isDrivableWay(tags) {
   if (!tags || !ROAD_TYPES.includes(tags.highway)) return false;
-  if (tags.access === 'no' || tags.motor_vehicle === 'no') return false;
-  if (tags.access === 'private' || tags.motor_vehicle === 'private') return false;
+  const vehicleAccess = tags.motorcar ?? tags.motor_vehicle ?? tags.vehicle ?? tags.access;
+  if (vehicleAccess === 'no' || vehicleAccess === 'private') return false;
   return true;
 }
 
@@ -253,6 +257,31 @@ async function loadOsmGraph(start, end) {
   const query = `[out:json][timeout:25];way[highway~"^(${ROAD_PATTERN})$"]`
     + `[access!="no"][motor_vehicle!="no"]`
     + `(${bounds.south},${bounds.west},${bounds.north},${bounds.east});out geom;`;
+  const cached = osmGraphCache.get(query);
+  if (cached && cached.expiresAt > Date.now()) {
+    osmGraphCache.delete(query);
+    osmGraphCache.set(query, cached);
+    return cached.graph;
+  }
+  if (cached) osmGraphCache.delete(query);
+
+  const existingLoad = osmGraphLoads.get(query);
+  if (existingLoad) return existingLoad;
+
+  const load = loadOsmGraphData(query).then((graph) => {
+    osmGraphCache.set(query, { graph, expiresAt: Date.now() + OSM_GRAPH_CACHE_TTL_MS });
+    while (osmGraphCache.size > MAX_CACHED_OSM_GRAPHS) {
+      osmGraphCache.delete(osmGraphCache.keys().next().value);
+    }
+    return graph;
+  }).finally(() => {
+    osmGraphLoads.delete(query);
+  });
+  osmGraphLoads.set(query, load);
+  return load;
+}
+
+async function loadOsmGraphData(query) {
   let payload = null;
   const failures = [];
 
@@ -319,8 +348,16 @@ async function loadOsmGraph(start, end) {
     }
 
     const tags = way.tags || {};
-    const onewayValue = String(tags.oneway || '').toLowerCase();
-    const isOneway = ['yes', '1', 'true', '-1'].includes(onewayValue) || tags.junction === 'roundabout';
+    const onewayValue = String(
+      tags['oneway:motorcar']
+        ?? tags['oneway:motor_vehicle']
+        ?? tags['oneway:vehicle']
+        ?? tags.oneway
+        ?? ''
+    ).toLowerCase();
+    const explicitlyBidirectional = ['no', '0', 'false'].includes(onewayValue);
+    const isOneway = ['yes', '1', 'true', '-1'].includes(onewayValue)
+      || (tags.junction === 'roundabout' && !explicitlyBidirectional);
     const reverseOnly = onewayValue === '-1';
 
     for (let index = 1; index < count; index += 1) {
@@ -352,7 +389,15 @@ function nearestNode(graph, point) {
   return best;
 }
 
-function shortestPath(graph, startId, endId, hazards, bannedEdges = new Set(), bannedNodes = new Set()) {
+function shortestPath(
+  graph,
+  startId,
+  endId,
+  hazards,
+  hazardEdgeCache,
+  bannedEdges = new Set(),
+  bannedNodes = new Set()
+) {
   const costs = new Map([[startId, 0]]);
   const previous = new Map();
   const heap = new MinHeap();
@@ -372,7 +417,13 @@ function shortestPath(graph, startId, endId, hazards, bannedEdges = new Set(), b
       // when the detour is longer, which means every generated alternative
       // may continue through the hazard. Exclude those edges before running
       // Dijkstra so both the recommended route and its alternatives are safe.
-      if (edgeTouchesHazard(edge, hazards, DEFAULT_HAZARD_RADIUS_METERS)) continue;
+      if (!hazardEdgeCache.has(edge.id)) {
+        hazardEdgeCache.set(
+          edge.id,
+          edgeTouchesHazard(edge, hazards, DEFAULT_HAZARD_RADIUS_METERS)
+        );
+      }
+      if (hazardEdgeCache.get(edge.id)) continue;
 
       const nextCost = current.cost + edge.durationSeconds;
       if (nextCost < (costs.get(edge.toId) ?? Infinity)) {
@@ -410,7 +461,8 @@ function samePathPrefix(path, prefix) {
 }
 
 function kShortestPaths(graph, startId, endId, hazards, limit) {
-  const firstPath = shortestPath(graph, startId, endId, hazards);
+  const hazardEdgeCache = new Map();
+  const firstPath = shortestPath(graph, startId, endId, hazards, hazardEdgeCache);
   if (!firstPath) return [];
 
   const accepted = [firstPath];
@@ -437,7 +489,15 @@ function kShortestPaths(graph, startId, endId, hazards, limit) {
         rootNodeId = edge.toId;
       }
 
-      const spurPath = shortestPath(graph, spurNodeId, endId, hazards, bannedEdges, bannedNodes);
+      const spurPath = shortestPath(
+        graph,
+        spurNodeId,
+        endId,
+        hazards,
+        hazardEdgeCache,
+        bannedEdges,
+        bannedNodes
+      );
       if (spurPath) {
         const totalPath = [...rootPath, ...spurPath];
         const signature = pathSignature(totalPath);
@@ -1065,12 +1125,6 @@ async function calculateDijkstraRoutes(start, end, hazards, limit = 3) {
     );
     error.status = 400;
     throw error;
-  }
-
-  const firstPath = shortestPath(graph, startNode.id, endNode.id, safeHazards);
-  if (!firstPath) {
-    const detouredRoutes = await getOsrmDetourRoutes();
-    return mergeRouteCandidates([safeOsrmRoutes, detouredRoutes], safeHazards, routeLimit);
   }
 
   const graphPaths = kShortestPaths(graph, startNode.id, endNode.id, safeHazards, Math.max(routeLimit * 3, routeLimit));

@@ -31,6 +31,15 @@ const roadGraph = {
         { lat: 0.002, lon: 0.007 },
         { lat: 0, lon: 0.01 }
       ]
+    },
+    {
+      type: 'way', id: 30, nodes: [1, 6, 3],
+      tags: { highway: 'motorway', maxspeed: '130', motor_vehicle: 'no' },
+      geometry: [
+        { lat: 0, lon: 0 },
+        { lat: 0.004, lon: 0.005 },
+        { lat: 0, lon: 0.01 }
+      ]
     }
   ]
 };
@@ -41,6 +50,7 @@ let server;
 let baseUrl;
 let token;
 let stopDatabase;
+let overpassRequests = 0;
 
 before(async () => {
   stopDatabase = await startTestDatabase();
@@ -52,6 +62,7 @@ before(async () => {
     if (String(url).startsWith(baseUrl)) return originalFetch(url, options);
     assert.match(String(url), /^https:\/\/overpass\.test\//);
     assert.equal(options.method, 'POST');
+    overpassRequests += 1;
     return new Response(JSON.stringify(roadGraph), {
       status: 200,
       headers: { 'content-type': 'application/json' }
@@ -115,6 +126,10 @@ test('posting a hazard on the current route makes the route API return a clear d
   const originalRoutePayload = await originalRouteResponse.json();
   const originalRoute = originalRoutePayload.data[0];
   assert.ok(routeComesWithinMeters(originalRoute, hazardPoint, 100), 'the initial fastest route should cross the future hazard point');
+  assert.ok(
+    originalRoute.geometry.coordinates.every(([, lat]) => lat < 0.003),
+    'the route must not use a faster road restricted to motor vehicles'
+  );
 
   const reportResponse = await postApi('/api/hazards', {
     title: 'Flooded road',
@@ -130,6 +145,7 @@ test('posting a hazard on the current route makes the route API return a clear d
   const rerouteResponse = await postApi('/api/route', routeBody);
   assert.equal(rerouteResponse.status, 200);
   const reroutePayload = await rerouteResponse.json();
+  assert.equal(overpassRequests, 1, 'repeated routes over the same map area should reuse the cached OSM graph');
   assert.equal(reroutePayload.hazardsConsidered, 1);
   assert.ok(reroutePayload.data.length > 0, 'a safe alternate route should be returned');
   assert.ok(

@@ -134,7 +134,10 @@ function createHazardMarker(category, severity) {
   });
 }
 
-function createVehicleMarker() {
+function createVehicleMarker(heading) {
+  const rotation = Number.isFinite(heading)
+    ? `transform="rotate(${heading} 12 12)"`
+    : '';
   return L.divIcon({
     className: 'custom-vehicle-marker-wrapper',
     html: `
@@ -155,7 +158,7 @@ function createVehicleMarker() {
           border: 2.5px solid white;
         ">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
+            <polygon points="12 2 19 21 12 17 5 21 12 2" ${rotation}></polygon>
           </svg>
         </div>
       </div>
@@ -266,6 +269,8 @@ export function MapView({
   const [simulationIndex, setSimulationIndex] = useState(0);
   const [simulatedSpeed, setSimulatedSpeed] = useState(48);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [liveLocationStatus, setLiveLocationStatus] = useState('inactive');
+  const [liveSpeed, setLiveSpeed] = useState(null);
 
   // Voice Guidance (Text-To-Speech)
   const speakGuidance = useCallback((text) => {
@@ -593,6 +598,65 @@ export function MapView({
     }
   }, [routeResults, selectedRouteIndex, navigationMode, previewAlternateRoute]);
 
+  useEffect(() => {
+    if (!navigationMode) {
+      setLiveLocationStatus('inactive');
+      setLiveSpeed(null);
+      return undefined;
+    }
+
+    if (!navigator.geolocation) {
+      setLiveLocationStatus('error');
+      if (onToast) onToast('Live location is not supported by this browser.', 'error');
+      return undefined;
+    }
+
+    let watching = true;
+    let errorReported = false;
+    setLiveLocationStatus('searching');
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (!watching) return;
+        const { latitude, longitude, speed, heading } = position.coords;
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+        const currentPoint = [latitude, longitude];
+        const map = mapInstanceRef.current;
+        if (vehicleMarkerRef.current) {
+          vehicleMarkerRef.current.setLatLng(currentPoint);
+          if (Number.isFinite(heading)) {
+            vehicleMarkerRef.current.setIcon(createVehicleMarker(heading));
+          }
+        } else if (map) {
+          vehicleMarkerRef.current = L.marker(currentPoint, {
+            icon: createVehicleMarker(heading),
+            zIndexOffset: 1000
+          }).addTo(map);
+        }
+
+        if (map) map.panTo(currentPoint, { animate: true, duration: 0.4 });
+        setLiveLocationStatus('active');
+        setLiveSpeed(Number.isFinite(speed) ? Math.round(speed * 3.6) : null);
+      },
+      (error) => {
+        if (!watching) return;
+        setLiveLocationStatus('error');
+        if (!errorReported) {
+          errorReported = true;
+          if (onToast) {
+            onToast(error.message || 'Could not access live location during navigation.', 'error');
+          }
+        }
+      },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+    );
+
+    return () => {
+      watching = false;
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [navigationMode, onToast]);
+
   // Turn-by-Turn Drive Simulation along Route
   useEffect(() => {
     let timer = null;
@@ -708,7 +772,13 @@ export function MapView({
                   </span>
                   <span className="text-slate-500">•</span>
                   <span className="text-xs text-slate-300">
-                    Step {simulationIndex + 1} of {activeRoute.geometry?.coordinates?.length || 1}
+                    {liveLocationStatus === 'active'
+                      ? 'Live GPS'
+                      : liveLocationStatus === 'searching'
+                        ? 'Acquiring GPS'
+                        : liveLocationStatus === 'error'
+                          ? 'GPS unavailable'
+                          : `Step ${simulationIndex + 1} of ${activeRoute.geometry?.coordinates?.length || 1}`}
                   </span>
                 </div>
                 <h3 className="font-extrabold text-base leading-snug">
@@ -722,7 +792,10 @@ export function MapView({
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-black/40 border border-white/10">
                 <div className="text-right">
                   <span className="text-[9px] uppercase font-bold text-slate-400 block">Speed</span>
-                  <span className="font-mono font-black text-sm text-emerald-400">{simulatedSpeed} <span className="text-[10px] text-slate-400">km/h</span></span>
+                  <span className="font-mono font-black text-sm text-emerald-400">
+                    {liveSpeed ?? (simulationRunning ? simulatedSpeed : '--')}
+                    <span className="text-[10px] text-slate-400"> km/h</span>
+                  </span>
                 </div>
                 <div className="w-6 h-6 rounded-full border-2 border-rose-500 flex items-center justify-center font-bold text-[9px] text-slate-200">
                   50

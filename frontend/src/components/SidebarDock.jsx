@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import React, { useState, useMemo } from 'react';
-=======
-import React, { useRef, useState } from 'react';
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
+import React, { useRef, useState, useMemo } from 'react';
 import {
   Navigation,
   Plus,

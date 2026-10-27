@@ -1,6 +1,6 @@
-# NaviGuard
+# NavGuard
 
-NaviGuard is a safety-first navigation app that combines intelligent route planning with account-scoped hazard reports. Signed-in users can plan routes, avoid their own reported obstacles such as flooding, debris, and road damage via Dijkstra/OSRM detours, attach photos and GPS coordinates, and monitor weather advisories.
+NavGuard is a safety-first navigation app that combines intelligent route planning with account-scoped hazard reports. Signed-in users can plan routes, avoid their own reported obstacles such as flooding, debris, and road damage via Dijkstra/OSRM detours, attach photos and GPS coordinates, and monitor weather advisories.
 
 ## Highlights
 
@@ -16,7 +16,7 @@ NaviGuard is a safety-first navigation app that combines intelligent route plann
 - **Live Address Autocomplete**: Instant search suggestions for origins and destinations powered by Nominatim
 - **Private Hazard Reporting**: Each signed-in user can view, confirm, route around, and resolve only their own saved hazards
 - **Live Weather Advisory**: Configurable Open-Meteo integration delivering road conditions and 1-click weather hazard reporting (no API key required)
-- **Express + MongoDB Backend**: Persists unique accounts and user-owned hazards, protects hazard photos, and serves the authenticated REST API and SPA
+- **Express + MongoDB Backend**: Persists unique accounts, user-owned hazards and saved places, stores private photos in MongoDB, and serves the authenticated REST API and SPA
 
 ## Project structure
 
@@ -25,7 +25,7 @@ NaviGuard is a safety-first navigation app that combines intelligent route plann
 ├── backend/
 │   ├── src/
 │   │   ├── dijkstra-router.js     # Routing engine, OSRM & OpenStreetMap graph
-│   │   ├── models/                # MongoDB user and hazard schemas
+│   │   ├── models/                # MongoDB user, hazard, and saved-place schemas
 │   │   └── server.js              # Express app, authentication, SPA hosting, and REST API
 │   ├── test/                      # API, image upload, authentication, and routing tests
 │   └── test-support/              # Isolated MongoDB test setup
@@ -48,6 +48,7 @@ NaviGuard is a safety-first navigation app that combines intelligent route plann
 
 - Node.js 18 or newer
 - npm 9 or newer
+- MongoDB 6 or newer (local or hosted)
 - A modern browser
 
 ## Quick start
@@ -59,7 +60,9 @@ npm install
 # 2. Configure MongoDB
 cp .env.example .env
 # Start a local MongoDB service, or set MONGODB_URI to your MongoDB Atlas URI.
-# For local development, NaviGuard creates and saves a private signing key in
+# Keep MongoDB's data directory on persistent storage; NavGuard requires MongoDB
+# and will not start if it cannot connect.
+# For local development, NavGuard creates and saves a private signing key in
 # .jwt-secret the first time it starts. In production, set JWT_SECRET to a
 # stable random value of at least 32 characters (for example, `openssl rand -base64 48`).
 
@@ -70,12 +73,12 @@ npm run build
 npm start
 ```
 
-Then open [http://localhost:3000](http://localhost:3000) to view NaviGuard.
+Then open [http://localhost:3000](http://localhost:3000) to view NavGuard.
 Create an account or sign in before accessing the application. Passwords are
-hashed before they are saved in MongoDB. The browser stores only the signed
-session token and profile, plus local hazards, saved places, and saved routes
-scoped to that user's ID;
-MongoDB remains the source of truth.
+hashed before they are saved in MongoDB. Accounts, hazards, saved places, and
+uploaded images are persisted in MongoDB and remain available after restarting
+the app, provided MongoDB uses persistent storage. The browser stores the
+signed session token and profile; saved routes remain local to the account.
 
 ### Development Mode
 
@@ -96,7 +99,6 @@ Accounts, hazards, and saved places are persisted in MongoDB. Every endpoint bel
 `Authorization: Bearer <token>` header. Hazard lists, edits, confirmations,
 routes, and photographs are scoped to the authenticated account.
 
-<<<<<<< HEAD
 | Method     | Endpoint             | Description                                                                                                    |
 | ---------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/api/health`      | Returns service status and timestamp                                                                           |
@@ -104,7 +106,6 @@ routes, and photographs are scoped to the authenticated account.
 | `POST`   | `/api/hazards`     | Creates a hazard, optionally with `coordinates: { lat, lng }` and an image (JPEG, PNG, WebP, GIF up to 5 MB) |
 | `DELETE` | `/api/hazards/:id` | Removes or resolves a hazard by ID                                                                             |
 | `POST`   | `/api/route`       | Calculates hazard-free routes with Dijkstra over live OpenStreetMap road data                                  |
-=======
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/api/health` | Returns service status and timestamp |
@@ -122,7 +123,6 @@ routes, and photographs are scoped to the authenticated account.
 | `GET` | `/api/places/:id/image` | Serves a saved-place photo only to its owner |
 | `DELETE` | `/api/places/:id` | Removes a saved place |
 | `POST` | `/api/route` | Calculates routes while avoiding only the signed-in user's hazards |
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
 
 Example account creation request (`POST /api/auth/register`):
 
@@ -136,7 +136,10 @@ Use the returned token in the `Authorization` header for authenticated requests.
 Saved places are available from the Places dashboard tab, where uploaded photos
 are shown at larger size. Photos are image-validated, limited to 5 MB, and
 account-scoped; saved routes remain stored locally for the signed-in account.
-To attach a photo, submit `POST /api/hazards` as `multipart/form-data` with a
+Multer temporarily holds each upload in memory for validation; sanitized image
+bytes and MIME type are saved in the corresponding MongoDB document. No upload
+files need to be retained in the backend filesystem. To attach a photo, submit
+`POST /api/hazards` as `multipart/form-data` with a
 `hazard` JSON string field and an `image` file (JPEG, PNG, WebP, or GIF up to
 5 MB). Photo bytes are stored in MongoDB and served through the owner-checked
 image endpoint.

@@ -15,20 +15,13 @@
     "node": ">=18"
   },
   "dependencies": {
-<<<<<<< HEAD
-=======
     "bcryptjs": "^3.0.3",
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
     "dotenv": "^18.0.9",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.61.0",
-<<<<<<< HEAD
-    "mongoose": "^9.11.4",
-=======
     "mongoose": "^8.24.7",
->>>>>>> fbc24ddca2a02f1afc11af6c62c1cf9005d4aa30
     "multer": "^2.5.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
